@@ -1,0 +1,30 @@
+{
+  "name": "audio-collage",
+  "version": "0.0.0",
+  "description": "Plot 3d audio in a 2d landscape.",
+  "main": "index.js",
+  "scripts": {
+    "test": "grunt"
+  },
+  "author": "Michael McManus",
+  "license": "MIT",
+  "dependencies": {
+    "backbone": "~0.9.10",
+    "underscore.deferred": "~0.4",
+    "underscore": "~1.4"
+  },
+  "devDependencies": {
+    "grunt": "~0.4.1",
+    "grunt-cli": "~0.1.9",
+    "grunt-contrib-jshint": "~0.1.1rc5",
+    "grunt-contrib-qunit": "~0.1.1rc5",
+    "grunt-nodequnit": "~0.1.0",
+    "grunt-contrib-yuidoc": "~0.4.0",
+    "backbone": "~0.9.10",
+    "underscore.deferred": "~0.4.0",
+    "underscore": "~1.4.4",
+    "grunt-contrib-connect": "~0.3.0",
+    "grunt-contrib-sass": "~0.4.1",
+    "grunt-contrib-watch": "~0.4.4"
+  }
+}
