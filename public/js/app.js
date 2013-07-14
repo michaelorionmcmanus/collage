@@ -1,17 +1,18 @@
-// Make an instance of two and place it on the page.
-var elem = document.getElementById('stage');
-var params = { width: 285, height: 200, fullscreen: true };
-var two = new Two(params).appendTo(elem);
+var stage = $('#stage');
+var listener = $('#listener');
 
-// two has convenience methods to create shapes.
-var circle = two.makeCircle(72, 100, 50);
-var rect = two.makeRectangle(213, 100, 100, 100);
+// Fire up the audio engine.
+Collage.AudiContextManager.init();
 
-// The object returned has many stylable properties:
-circle.fill = '#FF8000';
-circle.stroke = 'orangered'; // Accepts all valid css color
-circle.linewidth = 5;
-
-rect.fill = 'rgb(0, 200, 255)';
-rect.opacity = 0.75;
-rect.noStroke
+stage.on('dblclick', function(event) {
+  if(event.target.id === 'stage') {
+    var model = new Collage.AudioNodeModel();
+    var view = new Collage.AudioNodeView({
+      model: model,
+      x: event.offsetX,
+      y: event.offsetY,
+      listener: listener
+    });
+    view.render();
+  }
+});

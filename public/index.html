@@ -13,6 +13,7 @@
         <!-- Place favicon.ico and apple-touch-icon.png in the root directory -->
 
         <link rel="stylesheet" href="../bower_components/normalize-css/normalize.css">
+        <link rel="stylesheet" href="styles/css/bootstrap.min.css">
         <link rel="stylesheet" href="styles/css/main.css">
     </head>
     <body>
@@ -21,12 +22,50 @@
         <![endif]-->
 
         <!-- Add your site or application content here -->
-        <div id="stage"></div>
+        <div id="stage">
+            <div id="listener"></div>
+        </div>
+
+        <!-- Templates -->
+        <script id="AudioNodeControlTemplate" type="text/x-handlebars-template">
+        <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3 id="myModalLabel">Audio Node Settings</h3>
+        </div>
+        <div class="modal-body">
+            <form class="form-horizontal">
+                <div class="control-group">
+                    <label class="control-label" for="rolloffFactor">Rolloff Factor</label>
+                    <div class="controls">
+                        <div class="input-append">
+                            <input type="number" id="rollofFactor" name="rolloffFactor">
+                            <button type="button" class="btn btn-primary" data-toggle="popover" data-placement="left" data-content="Describes how quickly the volume is reduced as source moves away from listener." title="" data-original-title="Rolloff Factor"><i class=" icon-info-sign icon-white"/></button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+        <button class="btn btn-primary" data-dismiss="modal" aria-hidden="true">Close</button>
+        </div>
+        </script>
 
         <script src="../bower_components/two/build/two.js"></script>
+        <script src="../bower_components/q/q.js"></script>
+        <script src="../bower_components/jquery/jquery.js"></script>
+        <script src="../bower_components/handlebars/handlebars.js"></script>
+        <script src="js/libs/jquery.event.drag-2.2.js"></script>
+        <script src="js/libs/bootstrap.min.js"></script>
         <script src="../node_modules/underscore/underscore.js"></script>
         <script src="../node_modules/backbone/backbone.js"></script>
+        <script src="../node_modules/backbone.epoxy/backbone.epoxy.js"></script>
+        <script>var Collage = {};</script>
+        <script src="js/Controllers/AudioContextManager.js"></script>
+        <script src="js/Controllers/Util.js"></script>
+        <script src="js/models/AudioNode.js"></script>
+        <script src="js/views/AudioNode.js"></script>
+        <script src="js/views/AudioNodeControlView.js"></script>
         <script src="js/app.js"></script>
-
+    
     </body>
 </html>
