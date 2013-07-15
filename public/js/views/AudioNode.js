@@ -24,7 +24,7 @@ Collage.AudioNodeView = Backbone.View.extend({
     this.$el.append($('<div/>').addClass('control'));
     
     this.orientation = $('<div/>').addClass('orientation');
-    $('#stage').append(this.orientation);
+    this.$el.append(this.orientation);
     this.orientAudio();
   },
 
@@ -101,29 +101,23 @@ Collage.AudioNodeView = Backbone.View.extend({
   },
 
   orientAudio: function() {
-    var listenerPosition = this.getListernerPosition();
-    var nodePosition = this.getNodePosition();
+    var p1 = this.getListernerPosition();
+    var p2 = this.getNodePosition();
+    var distance = -25;
 
-    var x1 = listenerPosition.x;
-    var x2 = nodePosition.x;
-    var y1 = listenerPosition.y;
-    var y2 = nodePosition.y;
-    var vx = x2 - x1;
-    var vy = y2 - y1;
-    var mag = Math.sqrt(vx*vx + vy*vy);
-    vx /= mag;
-    vy /= mag;
+    var p = Collage.Util.getArcPoint(p1, p2, distance);
 
-    var px = x1 + vx * (mag + -25);
-    var py = y1 + vy * (mag + -25);
+    var offsetY = p.y - this.orientation.outerHeight()/2;
+    var offsetX = p.x - this.orientation.outerWidth()/2 ;
 
+    var offsetEl = this.$el;
     this.orientation.css({
-      top: py - this.orientation.outerHeight()/2,
-      left: px - this.orientation.outerWidth()/2 
+      top: -( (p2.y - offsetY) - offsetEl.outerHeight()/2),
+      left: -( (p2.x - offsetX) - offsetEl.outerWidth()/2)
     });
 
-    var orientationX = (px - x2);
-    var orientationY = -(py - y2);
+    var orientationX = (p.x - p1.x)/10;
+    var orientationY = -(p.y - p1.y)/10;
 
     this.model.set('orientationX', orientationX);
     this.model.set('orientationY', orientationY);

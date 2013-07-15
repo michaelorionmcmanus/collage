@@ -1,4 +1,17 @@
 Collage.Util = {
+  // Find a point between two points, the distance from point 2.
+  getArcPoint: function(p1, p2, distance) {
+    var vx = p2.x - p1.x;
+    var vy = p2.y - p1.y;
+    var mag = Math.sqrt(vx*vx + vy*vy);
+    vx /= mag;
+    vy /= mag;
+
+    var px = p1.x + vx * (mag + distance);
+    var py = p1.y + vy * (mag + distance);
+
+    return {x: px, y: py};
+  },
   HandleFileSelect: function(evt) {
     var deferred = Q.defer();
     var files = evt.target.files; // FileList object

@@ -7,7 +7,7 @@ Collage.AudiContextManager = {
     );
 
     if (!AudioContext) {
-    throw new Error("AudioContext not supported!");
+        throw new Error("AudioContext not supported!");
     }
 
     // Create a new audio context.
