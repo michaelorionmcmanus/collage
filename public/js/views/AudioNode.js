@@ -122,7 +122,11 @@ Collage.AudioNodeView = Backbone.View.extend({
       left: px - this.orientation.outerWidth()/2 
     });
 
-    console.log(px - x2, py - y2);
+    var orientationX = (px - x2);
+    var orientationY = -(py - y2);
+
+    this.model.set('orientationX', orientationX);
+    this.model.set('orientationY', orientationY);
   },
 
   renderControls: function() {

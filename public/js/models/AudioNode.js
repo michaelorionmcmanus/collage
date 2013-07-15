@@ -2,10 +2,11 @@ Collage.AudioNodeModel = Backbone.Epoxy.Model.extend({
 
   defaults: {
     orientation: [0,0,-1],
-    coneOuterAngle: 360,
-    coneInnerAngle: 360
+    coneOuterAngle: 180,
+    coneInnerAngle: 180,
+    rolloffFactor: 2.1,
   },
-  
+
   setSound: function(buffer) {
     var sound = Collage.Sound.makeSoundFromBuffer(buffer);
     this.set('sound', sound);
@@ -76,8 +77,7 @@ Collage.AudioNodeModel = Backbone.Epoxy.Model.extend({
     pannerRolloffFactor: {
       deps: ['rolloffFactor'],
       get: function(rolloffFactor) {
-        var sound = this.get('sound');
-        return sound && sound.panner ? sound.panner.rolloffFactor : null;
+        return this.get('rolloffFactor');
       },
       set: function( value ) {
         var sound = this.get('sound');
