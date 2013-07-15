@@ -8,7 +8,12 @@ Collage.AudioNodeControlView = Backbone.Epoxy.View.extend({
   },
 
   bindings: {
-    "input[name='rolloffFactor']": "value:pannerRolloffFactor"
+    "input[name='rolloffFactor']": "value:pannerRolloffFactor",
+    "input[name='orientationX']": "value:orientationX",
+    "input[name='orientationY']": "value:orientationY",
+    "input[name='orientationZ']": "value:orientationZ",
+    "input[name='coneInnerAngle']": "value:coneInnerAngle",
+    "input[name='coneOuterAngle']": "value:coneOuterAngle"
   },
 
   template: function() {

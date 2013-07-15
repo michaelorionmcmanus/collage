@@ -1,13 +1,77 @@
 Collage.AudioNodeModel = Backbone.Epoxy.Model.extend({
   setSound: function(buffer) {
-    var sound = Collage.Util.MakeSound(buffer);
+    var sound = Collage.Sound.makeSoundFromBuffer(buffer);
     this.set('sound', sound);
+    this.set('orientation', [0,0,-1]);
+    this.set('coneOuterAngle', 360);
+    this.set('coneInnerAngle', 360);
+  },
+
+  initialize: function() {
+    this.bind('change:orientation', function(model, value, options) {
+      var sound = this.get('sound');
+      if(sound && sound.panner) {
+        sound.panner.setOrientation(value[0], value[1], value[2]);
+      }
+    });
+
+    this.bind('change:coneInnerAngle', function(model, value, options) {
+      var sound = this.get('sound');
+      if(sound && sound.panner) {
+        sound.panner.coneInnerAngle = value;
+      }
+    });
+
+    this.bind('change:coneOuterAngle', function(model, value, options) {
+      var sound = this.get('sound');
+      if(sound && sound.panner) {
+        sound.panner.coneOuterAngle = value;
+      }
+    });
   },
 
   computeds: {
+    orientationX: {
+      deps: ['orientation'],
+      get: function(orientation) {
+        return orientation ? orientation[0] : null;
+      },
+      set: function(value) {
+        var orientation = this.get('orientation');
+        // If we modify the current array by reference, it will screw up change recoginition
+        // deep within Backbone/Epoxy land. So we need a copy. Kind of dumb.
+        var newOrientation = orientation.slice(0);
+        newOrientation[0] = value;
+        return {orientation: newOrientation};
+      }
+    },
+    orientationY: {
+      deps: ['orientation'],
+      get: function(orientation) {
+        return orientation ? orientation[1] : null;
+      },
+      set: function(value) {
+        var orientation = this.get('orientation');
+        var newOrientation = orientation.slice(0);
+        newOrientation[1] = value;
+        return {orientation: newOrientation};
+      }
+    },
+    orientationZ: {
+      deps: ['orientation'],
+      get: function(orientation) {
+        return orientation ? orientation[2] : null;
+      },
+      set: function(value) {
+        var orientation = this.get('orientation');
+        var newOrientation = orientation.slice(0);
+        newOrientation[2] = value;
+        return {orientation: newOrientation};
+      }
+    },
     pannerRolloffFactor: {
       deps: ['rolloffFactor'],
-      get: function(sound) {
+      get: function(rolloffFactor) {
         var sound = this.get('sound');
         return sound && sound.panner ? sound.panner.rolloffFactor : null;
       },

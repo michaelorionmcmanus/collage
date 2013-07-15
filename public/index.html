@@ -43,6 +43,18 @@
                         </div>
                     </div>
                 </div>
+                <div class="control-group">
+                    <label class="control-label" >Orientation</label>
+                    <div class="controls">
+                        X: <input type="number" class="input-mini" name="orientationX"/> Y: <input type="number" class="input-mini" name="orientationY"/> Z: <input type="number" class="input-mini" name="orientationZ"/>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label class="control-label" >Cones</label>
+                    <div class="controls">
+                        Inner: <input type="number" class="input-mini" name="coneInnerAngle"/> Outer: <input type="number" class="input-mini" name="coneOuterAngle"/>
+                    </div>
+                </div>
             </form>
         </div>
         <div class="modal-footer">
@@ -61,6 +73,7 @@
         <script src="../node_modules/backbone.epoxy/backbone.epoxy.js"></script>
         <script>var Collage = {};</script>
         <script src="js/Controllers/AudioContextManager.js"></script>
+        <script src="js/Controllers/Sound.js"></script>
         <script src="js/Controllers/Util.js"></script>
         <script src="js/models/AudioNode.js"></script>
         <script src="js/views/AudioNode.js"></script>
