@@ -7,6 +7,13 @@ html, body, #stage {
   height: 50px;
   position: absolute; }
 
+.orientation {
+  position: absolute;
+  border-radius: 100%;
+  background-color: black;
+  width: 5px;
+  height: 5px; }
+
 .circle .control {
   position: absolute;
   top: -12px;

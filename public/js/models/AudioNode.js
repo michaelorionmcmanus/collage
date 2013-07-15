@@ -1,10 +1,14 @@
 Collage.AudioNodeModel = Backbone.Epoxy.Model.extend({
+
+  defaults: {
+    orientation: [0,0,-1],
+    coneOuterAngle: 360,
+    coneInnerAngle: 360
+  },
+  
   setSound: function(buffer) {
     var sound = Collage.Sound.makeSoundFromBuffer(buffer);
     this.set('sound', sound);
-    this.set('orientation', [0,0,-1]);
-    this.set('coneOuterAngle', 360);
-    this.set('coneInnerAngle', 360);
   },
 
   initialize: function() {

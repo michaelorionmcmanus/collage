@@ -10,7 +10,16 @@ html, body, #stage {
   // background-color: #FF8000;
   position: absolute;
   // border: solid orangered 5px;
+
 }
+
+  .orientation {
+    position: absolute;
+    border-radius: 100%;
+    background-color: black;
+    width: 5px;
+    height: 5px;
+  }
 
 .circle .control {
   position: absolute;

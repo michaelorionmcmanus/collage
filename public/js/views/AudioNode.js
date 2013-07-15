@@ -22,6 +22,10 @@ Collage.AudioNodeView = Backbone.View.extend({
     // Because SVG shapes are nicer looking.
     this.makeShape();
     this.$el.append($('<div/>').addClass('control'));
+    
+    this.orientation = $('<div/>').addClass('orientation');
+    $('#stage').append(this.orientation);
+    this.orientAudio();
   },
 
   buildSound: function() {
@@ -39,6 +43,7 @@ Collage.AudioNodeView = Backbone.View.extend({
   handleDrag: function(ev, dd) {
     this.position(dd.offsetX, dd.offsetY);
     this.positionAudio();
+    this.orientAudio();
   },
 
   position: function(x,y) {
@@ -62,20 +67,11 @@ Collage.AudioNodeView = Backbone.View.extend({
   },
 
   positionAudio: function() {
-    var listenerPosition = this.options.listener.position();
-    var listenerWidth = this.options.listener.outerWidth();
-    var listenerHeight = this.options.listener.outerHeight();
-    var listenerX = listenerPosition.left + listenerWidth / 2;
-    var listenerY = listenerPosition.top + listenerHeight / 2;
+    var listenerPosition = this.getListernerPosition();
+    var nodePosition = this.getNodePosition();
 
-    var nodePosition = this.$el.position();
-    var nodeWidth = this.$el.outerWidth();
-    var nodeHeight = this.$el.outerHeight();
-    var nodeX = nodePosition.left + nodeWidth / 2;
-    var nodeY = nodePosition.top + nodeHeight / 2;
-
-    var offsetX = nodeX - listenerX;
-    var offsetY = listenerY - nodeY;
+    var offsetX = nodePosition.x - listenerPosition.x;
+    var offsetY = listenerPosition.y - nodePosition.y;
     
     var sound = this.model.get('sound');
 
@@ -84,6 +80,49 @@ Collage.AudioNodeView = Backbone.View.extend({
     if(sound && sound.panner) {
       sound.panner.setPosition(x * 0.5, y * 0.5, 0);
     }
+  },
+
+  getListernerPosition: function() {
+    var listenerPosition = this.options.listener.position();
+    var listenerWidth = this.options.listener.outerWidth();
+    var listenerHeight = this.options.listener.outerHeight();
+    var listenerX = listenerPosition.left + listenerWidth / 2;
+    var listenerY = listenerPosition.top + listenerHeight / 2;
+    return {x: listenerX, y: listenerY};
+  },
+
+  getNodePosition: function() {
+    var nodePosition = this.$el.position();
+    var nodeWidth = this.$el.outerWidth();
+    var nodeHeight = this.$el.outerHeight();
+    var nodeX = nodePosition.left + nodeWidth / 2;
+    var nodeY = nodePosition.top + nodeHeight / 2;
+    return {x: nodeX, y: nodeY};
+  },
+
+  orientAudio: function() {
+    var listenerPosition = this.getListernerPosition();
+    var nodePosition = this.getNodePosition();
+
+    var x1 = listenerPosition.x;
+    var x2 = nodePosition.x;
+    var y1 = listenerPosition.y;
+    var y2 = nodePosition.y;
+    var vx = x2 - x1;
+    var vy = y2 - y1;
+    var mag = Math.sqrt(vx*vx + vy*vy);
+    vx /= mag;
+    vy /= mag;
+
+    var px = x1 + vx * (mag + -25);
+    var py = y1 + vy * (mag + -25);
+
+    this.orientation.css({
+      top: py - this.orientation.outerHeight()/2,
+      left: px - this.orientation.outerWidth()/2 
+    });
+
+    console.log(px - x2, py - y2);
   },
 
   renderControls: function() {
