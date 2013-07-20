@@ -4,7 +4,6 @@
   "dependencies": {
     "two": "~0.2.0",
     "normalize-css": "~2.1.2",
-    "qunit": "~1.11.0",
     "jquery": "~2.0.3",
     "q": "~0.9.6",
     "jquery-dragEvents": "latest",

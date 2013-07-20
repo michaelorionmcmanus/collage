@@ -19,10 +19,6 @@ module.exports = ->
         eqnull: true
         globals: {}
 
-    # Run QUnit tests for browser environments.
-    qunit:
-      files: ["test/index.html"]
-
     # Generate documentation with YUI doc
     yuidoc:
       compile:
@@ -34,6 +30,11 @@ module.exports = ->
           paths: './'
           outdir: 'docs'
 
+    karma:
+      unit:
+        configFile: 'karma.conf.js',
+        autoWatch: true
+
     sass:
       dist:
         files:
@@ -44,7 +45,6 @@ module.exports = ->
         files: ['public/styles/sass/*.scss']
         tasks: ['sass']
 
-
     connect: 
       server: 
         options: 
@@ -53,11 +53,11 @@ module.exports = ->
         
   # Load external Grunt task plugins.
   @loadNpmTasks "grunt-contrib-jshint"
-  @loadNpmTasks "grunt-contrib-qunit"
+  @loadNpmTasks "grunt-karma"
   @loadNpmTasks "grunt-contrib-yuidoc"
   @loadNpmTasks "grunt-contrib-connect"
   @loadNpmTasks "grunt-contrib-sass"
   @loadNpmTasks "grunt-contrib-watch"
 
   # Default task.
-  @registerTask "default", ["jshint", "qunit", "yuidoc"]
+  @registerTask "default", ["jshint", "yuidoc", "karma"]

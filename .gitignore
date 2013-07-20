@@ -4,3 +4,4 @@ docs
 .idea
 .DS_Store
 .sass-cache/
+libpeerconnection.log
