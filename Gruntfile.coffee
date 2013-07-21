@@ -92,13 +92,14 @@ module.exports = ->
     uglify:
       options:
         sourceMap: "dist/js/source.js.map",
+        sourceMappingURL: "source.js.map"
         sourceMapRoot: "",
-        sourceMapPrefix: 1,
+        sourceMapPrefix: 2,
         preserveComments: "some"
 
       release:
         files:
-          "dist/js/source.js": ["dist/js/source.js"]
+          "dist/js/source.js": ["dist/js/source.debug.js"]
 
     # Combine the Almond AMD loader and precompiled templates with the
     # application source code.
@@ -135,6 +136,10 @@ module.exports = ->
         files: [
           { expand: true, flatten: true, src: ["dev/styles/img/**"], dest: "dist/styles/img/", filter: 'isFile' }
         ]
+      map:
+        files: [
+          { src: ["dist/js/source.js"], dest: "dist/js/source.debug.js" }
+        ]
       release:
         files: [
           { expand: true, cwd: "dist", src: ["**"], dest: "_release/" }
@@ -162,4 +167,4 @@ module.exports = ->
   @registerTask "debug", ["clean:debug", "jshint", "requirejs", "concat:js", "concat:styles", "copy:debug"]
 
   # Take dist, minify and compress and copy to _release dir.
-  @registerTask "release", ["debug", "clean:release", "cssmin:release", "uglify", "compress", "copy:release"]
+  @registerTask "release", ["debug", "clean:release", "cssmin:release", "copy:map", "uglify", "compress", "copy:release"]
