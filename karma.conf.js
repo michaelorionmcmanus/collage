@@ -14,12 +14,15 @@ files = [
   REQUIRE_ADAPTER,
   'test/test-main.js',
   {pattern: 'lib/**/*.js', included: false},
-  {pattern: 'src/js/**/*.js', included: false},
+  {pattern: 'src/**/*.js', included: false},
   {pattern: 'test/**/*Spec.js', included: false},
   {pattern: 'node_modules/**/*.js', included: false},
   {pattern: 'bower_components/**/*.js', included: false}
 ];
 
+preprocessors = {
+  'src/**/*.js': 'coverage'
+};
 
 // list of files to exclude
 exclude = [
@@ -29,7 +32,7 @@ exclude = [
 
 // test results reporter to use
 // possible values: 'dots', 'progress', 'junit'
-reporters = ['dots'];
+reporters = ['progress'];
 
 
 // web server port
@@ -61,7 +64,7 @@ autoWatch = false;
 // - Safari (only Mac)
 // - PhantomJS
 // - IE (only Windows)
-browsers = ['Chrome', 'PhantomJS', 'ChromeCanary'];
+browsers = ['PhantomJS'];
 
 
 // If browser does not capture in given timeout [ms], kill it

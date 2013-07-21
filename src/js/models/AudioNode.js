@@ -1,6 +1,9 @@
 define([
+  'backbone',
+  'backbone.epoxy',
   'controllers/Sound'
 ], function(
+  Backbone,
   Sound
   ) {
   return Backbone.Epoxy.Model.extend({

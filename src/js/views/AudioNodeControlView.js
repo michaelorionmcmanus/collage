@@ -1,4 +1,9 @@
-define([], function() {
+define([
+  'backbone',
+  'backbone.epoxy'
+], function(
+  Backbone
+  ) {
   return Backbone.Epoxy.View.extend({
     className: 'modal hide fade controls',
 

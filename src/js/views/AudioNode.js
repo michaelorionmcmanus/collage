@@ -1,7 +1,9 @@
 define([
+  'backbone',
   'views/AudioNodeControlView',
   'controllers/Util'
 ], function(
+  Backbone,
   AudioNodeControlView,
   Util
   ) {

@@ -31,9 +31,27 @@ module.exports = ->
           outdir: 'docs'
 
     karma:
-      unit:
+      options:
         configFile: 'karma.conf.js',
+        browsers: ['Chrome', 'PhantomJS']
+      dev:
+        reporters: ['dots']
         autoWatch: true
+      continuous:
+        singleRun: true,
+        browsers: ['PhantomJS']
+      'coverage-text':
+        singleRun: true,
+        reporters: ['coverage'],
+        coverageReporter:
+          type : 'text',
+          dir: 'coverage'
+      'coverage-html':
+        singleRun: true,
+        reporters: ['coverage'],
+        coverageReporter:
+          type : 'html',
+          dir: 'coverage'
 
     sass:
       dist:
