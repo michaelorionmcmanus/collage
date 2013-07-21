@@ -6,3 +6,5 @@ docs
 .sass-cache/
 libpeerconnection.log
 coverage*
+dist
+dist*

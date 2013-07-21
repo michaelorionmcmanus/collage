@@ -56,7 +56,9 @@ module.exports = ->
     sass:
       dist:
         files:
-          'public/styles/css/main.css': 'public/styles/sass/main.scss'
+          'dev/styles/css/main.css': 'dev/styles/sass/main.scss'
+
+
 
     watch:
       css:
@@ -68,7 +70,49 @@ module.exports = ->
         options: 
           port: 9001
           keepalive: true
-        
+
+    clean:
+      debug: ['dist/js', 'dist/styles']
+
+    requirejs: {
+      compile: {
+        options: {
+          baseUrl: 'src/js',
+          mainConfigFile: 'src/js/config.js',
+          out: 'dist/js/source.js',
+          include: ['initialize', 'app'],
+          optimize: 'none',
+          name: 'main',
+          wrap: true
+        }
+      }
+    }
+
+    # Combine the Almond AMD loader and precompiled templates with the
+    # application source code.
+    concat:
+      js:
+        src: [
+          "bower_components/almond/almond.js",
+          "dist/js/source.js"
+        ]
+        dest: "dist/js/source.js",
+        separator: ";"
+      styles:
+        src: [
+          "bower_components/normalize-css/normalize.css",
+          "dev/styles/css/bootstrap.min.css",
+          "dev/styles/css/main.css"
+        ]
+        dest:
+          "dist/styles/css/index.css"
+
+    copy:
+      debug:
+        files: [
+          { expand: true, flatten: true, src: ["dev/styles/img/**"], dest: "dist/styles/img/", filter: 'isFile' }
+        ]
+
   # Load external Grunt task plugins.
   @loadNpmTasks "grunt-contrib-jshint"
   @loadNpmTasks "grunt-karma"
@@ -76,6 +120,12 @@ module.exports = ->
   @loadNpmTasks "grunt-contrib-connect"
   @loadNpmTasks "grunt-contrib-sass"
   @loadNpmTasks "grunt-contrib-watch"
+  @loadNpmTasks "grunt-contrib-requirejs"
+  @loadNpmTasks "grunt-contrib-clean"
+  @loadNpmTasks "grunt-contrib-concat"
+  @loadNpmTasks "grunt-contrib-copy"
 
   # Default task.
   @registerTask "default", ["jshint", "yuidoc", "karma"]
+
+  @registerTask "build", ["clean:debug", "requirejs", "concat:js", "concat:styles", "copy:debug"]
