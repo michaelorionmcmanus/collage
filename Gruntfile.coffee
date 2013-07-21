@@ -9,7 +9,7 @@ module.exports = ->
     pkg: @file.readJSON('package.json')
     # Lint source, node, and test code with some sane options.
     jshint:
-      files: ["src/**.js"]
+      files: ["src/**/*.js"]
 
       # Allow certain options.
       options:
@@ -58,8 +58,6 @@ module.exports = ->
         files:
           'dev/styles/css/main.css': 'dev/styles/sass/main.scss'
 
-
-
     watch:
       css:
         files: ['public/styles/sass/*.scss']
@@ -73,6 +71,7 @@ module.exports = ->
 
     clean:
       debug: ['dist/js', 'dist/styles']
+      release: ['_release/**/*', '!_release/.git']
 
     requirejs: {
       compile: {
@@ -87,6 +86,19 @@ module.exports = ->
         }
       }
     }
+
+    # Minify the application built source and generate source maps back to
+    # the original debug build.
+    uglify:
+      options:
+        sourceMap: "dist/js/source.js.map",
+        sourceMapRoot: "",
+        sourceMapPrefix: 1,
+        preserveComments: "some"
+
+      release:
+        files:
+          "dist/js/source.js": ["dist/js/source.js"]
 
     # Combine the Almond AMD loader and precompiled templates with the
     # application source code.
@@ -107,10 +119,25 @@ module.exports = ->
         dest:
           "dist/styles/css/index.css"
 
+    compress:
+      release:
+        files:
+          "dist/js/source.js.gz": "dist/js/source.js",
+          "dist/styles/css/index.css.gz": "dist/styles/css/index.css"
+
+    cssmin:
+      release:
+        files:
+          "dist/styles/css/index.css": ["dist/styles/css/index.css"]
+
     copy:
       debug:
         files: [
           { expand: true, flatten: true, src: ["dev/styles/img/**"], dest: "dist/styles/img/", filter: 'isFile' }
+        ]
+      release:
+        files: [
+          { expand: true, cwd: "dist", src: ["**"], dest: "_release/" }
         ]
 
   # Load external Grunt task plugins.
@@ -124,8 +151,15 @@ module.exports = ->
   @loadNpmTasks "grunt-contrib-clean"
   @loadNpmTasks "grunt-contrib-concat"
   @loadNpmTasks "grunt-contrib-copy"
+  @loadNpmTasks "grunt-contrib-cssmin"
+  @loadNpmTasks "grunt-contrib-compress"
+  @loadNpmTasks "grunt-contrib-uglify"
 
   # Default task.
   @registerTask "default", ["jshint", "yuidoc", "karma"]
 
-  @registerTask "build", ["clean:debug", "requirejs", "concat:js", "concat:styles", "copy:debug"]
+  # Build project into "dist" dir, without compressing/minifying.
+  @registerTask "debug", ["clean:debug", "jshint", "requirejs", "concat:js", "concat:styles", "copy:debug"]
+
+  # Take dist, minify and compress and copy to _release dir.
+  @registerTask "release", ["debug", "clean:release", "cssmin:release", "uglify", "compress", "copy:release"]

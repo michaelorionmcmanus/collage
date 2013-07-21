@@ -1,7 +1,7 @@
 define([
   'backbone',
-  'backbone.epoxy',
-  'controllers/Sound'
+  'controllers/Sound',
+  'backbone.epoxy'
 ], function(
   Backbone,
   Sound

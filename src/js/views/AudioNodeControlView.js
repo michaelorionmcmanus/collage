@@ -9,7 +9,7 @@ define([
 
     events: {
       'hidden': function() {
-        this.remove()
+        this.remove();
       }
     },
 
@@ -35,4 +35,4 @@ define([
       this.$el.modal();
     }
   });
-})
+});

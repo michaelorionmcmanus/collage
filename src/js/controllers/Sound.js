@@ -30,6 +30,6 @@ define([
       panner.rolloffFactor = 2.1;
       return panner;
     }
-  }
+  };
 });
 
