@@ -10,17 +10,14 @@ define([
   return Backbone.View.extend({
     moving: false,
     className: 'circle',
-    template: 'AudioNode',
+    template: '',
 
     events: {
       'drag': function(event, dd) {
         this.handleDrag(event, dd);
       },
       'dblclick': 'buildSound',
-      'click .control': 'renderControls',
-      'afterRender': function() {
-        debugger;
-      }
+      'click .control': 'renderControls'
     },
 
     initialize: function() {

@@ -9,7 +9,6 @@ require.config({
     'q': '../../bower_components/q/q',
     'postal': '../../bower_components/postal.js/lib/postal',
     'two': '../../bower_components/two/build/two',
-    'handlebars': '../../bower_components/handlebars/handlebars',
     'twitter.bootstrap': '../../lib/bootstrap.min'
   },
 
@@ -17,12 +16,12 @@ require.config({
     'underscore': {
       exports: '_'
     },
-    'backbone':{
-      deps: ['underscore', 'jquery'],
-      exports: 'Backbone'
-    },
-    'backbone.epoxy': {
-      deps: ['backbone']
+    "backbone": {
+      "deps": [
+        "underscore",
+        "jquery"
+      ],
+      "exports": "Backbone"
     },
     "backbone.layoutmanager": {
       "deps": [
@@ -32,6 +31,9 @@ require.config({
       ],
       "exports": "Backbone.Layout"
     },
+    'backbone.epoxy': {
+      deps: ['backbone']
+    },
     'jquery.event.drag-2.2': {
       deps: ['jquery']
     },
@@ -40,9 +42,6 @@ require.config({
     },
     'twitter.bootstrap': {
       deps: ['jquery']
-    },
-    'handlebars': {
-      exports: 'Handlebars'
     }
   }
 });

@@ -4,14 +4,16 @@ define([
   'models/AudioNode',
   'views/AudioNode',
   'views/AudioNodeControlView',
-  'postal'
+  'postal',
+  'backbone'
 ], function(
   $,
   AudioContextManager,
   AudioNodeModel,
   AudioNodeView,
   AudioNodeControlView,
-  postal) {
+  postal,
+  Backbone) {
   return {
     init: function() {
       // Let's make a layout!

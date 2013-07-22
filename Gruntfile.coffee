@@ -73,15 +73,30 @@ module.exports = ->
       debug: ['dist/js', 'dist/styles']
       release: ['_release/**/*', '!_release/.git']
 
+    #  // The jst task compiles all application templates into JavaScript
+    #  // functions with the Lo-Dash template function.
+    jst:
+      debug:
+        options:
+          processName: (filePath) ->
+          # input:  templates/_header.hbs
+            pieces = filePath.split("/")
+            pieces = pieces.splice(1, pieces.length-1);
+            return pieces.join('/');
+        files:
+          "dist/js/templates.js": ["dev/templates/**/*.*"]
+
+
     requirejs: {
       compile: {
         options: {
           baseUrl: 'src/js',
           mainConfigFile: 'src/js/config.js',
           out: 'dist/js/source.js',
-          include: ['initialize', 'app'],
+          name: "config",
+          insertRequire: ["main"],
+          include: ['main', 'initialize', 'run'],
           optimize: 'none',
-          name: 'main',
           wrap: true
         }
       }
@@ -107,6 +122,11 @@ module.exports = ->
       js:
         src: [
           "bower_components/almond/almond.js",
+#          Handlebars is kind of borked right now. TL;DR Precompiling with 1.0.12 means you
+#          need to use the 1.0.0 *runtime*. Disabling until everything gets in sync between
+#          grunt-contrib-handlebars and npm/bower packages for handlebars. It's not worth
+#          monkeying with packaging different runtimes for builds vs. dev right now. :(
+          "dist/js/templates.js"
           "dist/js/source.js"
         ]
         dest: "dist/js/source.js",
@@ -159,12 +179,15 @@ module.exports = ->
   @loadNpmTasks "grunt-contrib-cssmin"
   @loadNpmTasks "grunt-contrib-compress"
   @loadNpmTasks "grunt-contrib-uglify"
+  @loadNpmTasks "grunt-contrib-handlebars"
+  @loadNpmTasks "grunt-contrib-jst"
+
 
   # Default task.
   @registerTask "default", ["jshint", "yuidoc", "karma"]
 
   # Build project into "dist" dir, without compressing/minifying.
-  @registerTask "debug", ["clean:debug", "jshint", "requirejs", "concat:js", "concat:styles", "copy:debug"]
+  @registerTask "debug", ["clean:debug", "jshint", "jst", "requirejs", "concat:js", "concat:styles", "copy:debug"]
 
   # Take dist, minify and compress and copy to _release dir.
   @registerTask "release", ["debug", "clean:release", "cssmin:release", "copy:map", "uglify", "compress", "copy:release"]
