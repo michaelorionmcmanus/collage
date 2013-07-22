@@ -404,6 +404,27 @@ var requirejs, require, define;
     };
 }());
 
+this["JST"] = this["JST"] || {};
+
+this["JST"]["templates/AudioNodeControlView.htm"] = function(obj) {
+obj || (obj = {});
+var __t, __p = '', __e = _.escape;
+with (obj) {
+__p += '<div class="modal-header">\n  <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>\n  <h3 id="myModalLabel">Audio Node Settings</h3>\n</div>\n<div class="modal-body">\n  <form class="form-horizontal">\n    <div class="control-group">\n      <label class="control-label" for="rolloffFactor">Rolloff Factor</label>\n      <div class="controls">\n        <div class="input-append">\n          <input type="number" id="rollofFactor" name="rolloffFactor">\n          <button type="button" class="btn btn-primary" data-toggle="popover" data-placement="left" data-content="Describes how quickly the volume is reduced as source moves away from listener." title="" data-original-title="Rolloff Factor"><i class=" icon-info-sign icon-white"/></button>\n        </div>\n      </div>\n    </div>\n    <div class="control-group">\n      <label class="control-label" >Orientation</label>\n      <div class="controls">\n        X: <input type="number" class="input-mini" name="orientationX"/> Y: <input type="number" class="input-mini" name="orientationY"/> Z: <input type="number" class="input-mini" name="orientationZ"/>\n      </div>\n    </div>\n    <div class="control-group">\n      <label class="control-label" >Cones</label>\n      <div class="controls">\n        Inner: <input type="number" class="input-mini" name="coneInnerAngle"/> Outer: <input type="number" class="input-mini" name="coneOuterAngle"/>\n      </div>\n    </div>\n  </form>\n</div>\n<div class="modal-footer">\n  <button class="btn btn-primary" data-dismiss="modal" aria-hidden="true">Close</button>\n</div>';
+
+}
+return __p
+};
+
+this["JST"]["templates/Stage.htm"] = function(obj) {
+obj || (obj = {});
+var __t, __p = '', __e = _.escape;
+with (obj) {
+__p += '<div id="stage">\n  <div id="listener"></div>\n</div>';
+
+}
+return __p
+};
 (function () {
 require.config({
   paths: {
@@ -412,9 +433,10 @@ require.config({
     'underscore': '../../node_modules/underscore/underscore',
     'backbone': '../../node_modules/backbone/backbone',
     'backbone.epoxy': '../../node_modules/backbone.epoxy/backbone.epoxy',
+    'backbone.layoutmanager': '../../node_modules/backbone.layoutmanager/backbone.layoutmanager',
     'q': '../../bower_components/q/q',
+    'postal': '../../bower_components/postal.js/lib/postal',
     'two': '../../bower_components/two/build/two',
-    'handlebars': '../../bower_components/handlebars/handlebars',
     'twitter.bootstrap': '../../lib/bootstrap.min'
   },
 
@@ -422,9 +444,20 @@ require.config({
     'underscore': {
       exports: '_'
     },
-    'backbone':{
-      deps: ['underscore', 'jquery'],
-      exports: 'Backbone'
+    "backbone": {
+      "deps": [
+        "underscore",
+        "jquery"
+      ],
+      "exports": "Backbone"
+    },
+    "backbone.layoutmanager": {
+      "deps": [
+        "jquery",
+        "backbone",
+        "underscore"
+      ],
+      "exports": "Backbone.Layout"
     },
     'backbone.epoxy': {
       deps: ['backbone']
@@ -437,9 +470,6 @@ require.config({
     },
     'twitter.bootstrap': {
       deps: ['jquery']
-    },
-    'handlebars': {
-      exports: 'Handlebars'
     }
   }
 });
@@ -14389,6 +14419,899 @@ define("backbone", ["underscore","jquery"], (function (global) {
 	
 	return Epoxy;
 }));
+/*!
+ * backbone.layoutmanager.js v0.8.8
+ * Copyright 2013, Tim Branyen (@tbranyen)
+ * backbone.layoutmanager.js may be freely distributed under the MIT license.
+ */
+(function(window) {
+
+
+
+// Hoisted, referenced at the bottom of the source.  This caches a list of all
+// LayoutManager options at definition time.
+var keys;
+
+// Localize global dependency references.
+var Backbone = window.Backbone;
+var _ = window._;
+var $ = Backbone.$;
+
+// Used for issuing warnings and debugging.
+var warn = window.console && window.console.warn;
+var trace = window.console && window.console.trace;
+
+// Maintain references to the two `Backbone.View` functions that are
+// overwritten so that they can be proxied.
+var _configure = Backbone.View.prototype._configure;
+var render = Backbone.View.prototype.render;
+
+// Cache these methods for performance.
+var aPush = Array.prototype.push;
+var aConcat = Array.prototype.concat;
+var aSplice = Array.prototype.splice;
+
+// LayoutManager is a wrapper around a `Backbone.View`.
+var LayoutManager = Backbone.View.extend({
+  // This named function allows for significantly easier debugging.
+  constructor: function Layout(options) {
+    // Options may not always be passed to the constructor, this ensures it is
+    // always an object.
+    options = options || {};
+
+    // Grant this View superpowers.
+    LayoutManager.setupView(this, options);
+
+    // Have Backbone set up the rest of this View.
+    Backbone.View.call(this, options);
+  },
+
+  // Shorthand to `setView` function with the `insert` flag set.
+  insertView: function(selector, view) {
+    // If the `view` argument exists, then a selector was passed in.  This code
+    // path will forward the selector on to `setView`.
+    if (view) {
+      return this.setView(selector, view, true);
+    }
+
+    // If no `view` argument is defined, then assume the first argument is the
+    // View, somewhat now confusingly named `selector`.
+    return this.setView(selector, true);
+  },
+
+  // Iterate over an object and ensure every value is wrapped in an array to
+  // ensure they will be inserted, then pass that object to `setViews`.
+  insertViews: function(views) {
+    // If an array of views was passed it should be inserted into the
+    // root view. Much like calling insertView without a selector.
+    if (_.isArray(views)) {
+      return this.setViews({ "": views });
+    }
+
+    _.each(views, function(view, selector) {
+      views[selector] = _.isArray(view) ? view : [view];
+    });
+
+    return this.setViews(views);
+  },
+
+  // Returns the View that matches the `getViews` filter function.
+  getView: function(fn) {
+    // If `getView` is invoked with undefined as the first argument, then the
+    // second argument will be used instead.  This is to allow
+    // `getViews(undefined, fn)` to work as `getViews(fn)`.  Useful for when
+    // you are allowing an optional selector.
+    if (fn == null) {
+      fn = arguments[1];
+    }
+
+    return this.getViews(fn).first().value();
+  },
+
+  // Provide a filter function to get a flattened array of all the subviews.
+  // If the filter function is omitted it will return all subviews.  If a
+  // String is passed instead, it will return the Views for that selector.
+  getViews: function(fn) {
+    var views;
+
+    // If the filter argument is a String, then return a chained Version of the
+    // elements. The value at the specified filter may be undefined, a single
+    // view, or an array of views; in all cases, chain on a flat array.
+    if (typeof fn === "string") {
+      views = this.views[fn] || [];
+      return _.chain([].concat(views));
+    }
+
+    // Generate an array of all top level (no deeply nested) Views flattened.
+    views = _.chain(this.views).map(function(view) {
+      return _.isArray(view) ? view : [view];
+    }, this).flatten();
+
+    // If the argument passed is an Object, then pass it to `_.where`.
+    if (typeof fn === "object") {
+      return views.where(fn);
+    }
+
+    // If a filter function is provided, run it on all Views and return a
+    // wrapped chain. Otherwise, simply return a wrapped chain of all Views.
+    return typeof fn === "function" ? views.filter(fn) : views;
+  },
+
+  // Use this to remove Views, internally uses `getViews` so you can pass the
+  // same argument here as you would to that method.
+  removeView: function(fn) {
+    // Allow an optional selector or function to find the right model and
+    // remove nested Views based off the results of the selector or filter.
+    return this.getViews(fn).each(function(nestedView) {
+      nestedView.remove();
+    });
+  },
+
+  // This takes in a partial name and view instance and assigns them to
+  // the internal collection of views.  If a view is not a LayoutManager
+  // instance, then mix in the LayoutManager prototype.  This ensures
+  // all Views can be used successfully.
+  //
+  // Must definitely wrap any render method passed in or defaults to a
+  // typical render function `return layout(this).render()`.
+  setView: function(name, view, insert) {
+    var manager, existing, options;
+    // Parent view, the one you are setting a View on.
+    var root = this;
+
+    // If no name was passed, use an empty string and shift all arguments.
+    if (typeof name !== "string") {
+      insert = view;
+      view = name;
+      name = "";
+    }
+
+    // If the parent views object doesn't exist... create it.
+    this.views = this.views || {};
+
+    // Shorthand the `__manager__` property.
+    manager = view.__manager__;
+
+    // Shorthand the View that potentially already exists.
+    existing = this.views[name];
+
+    // If the View has not been properly set up, throw an Error message
+    // indicating that the View needs `manage: true` set.
+    if (!manager) {
+      throw new Error("Please set `View#manage` property with selector '" +
+        name + "' to `true`.");
+    }
+
+    // Assign options.
+    options = view.getAllOptions();
+
+    // Add reference to the parentView.
+    manager.parent = root;
+
+    // Add reference to the placement selector used.
+    manager.selector = name;
+
+    // Set up event bubbling, inspired by Backbone.ViewMaster.  Do not bubble
+    // internal events that are triggered.
+    view.on("all", function(name) {
+      if (name !== "beforeRender" && name !== "afterRender") {
+        root.trigger.apply(root, arguments);
+      }
+    }, view);
+
+    // Code path is less complex for Views that are not being inserted.  Simply
+    // remove existing Views and bail out with the assignment.
+    if (!insert) {
+      // If the View we are adding has already been rendered, simply inject it
+      // into the parent.
+      if (manager.hasRendered) {
+        // Apply the partial.
+        options.partial(root.$el, view.$el, root.__manager__, manager);
+      }
+
+      // Ensure remove is called when swapping View's.
+      if (existing) {
+        // If the views are an array, iterate and remove each individually.
+        _.each(aConcat.call([], existing), function(nestedView) {
+          nestedView.remove();
+        });
+      }
+
+      // Assign to main views object and return for chainability.
+      return this.views[name] = view;
+    }
+
+    // Ensure this.views[name] is an array and push this View to the end.
+    this.views[name] = aConcat.call([], existing || [], view);
+
+    // Put the view into `insert` mode.
+    manager.insert = true;
+
+    return view;
+  },
+
+  // Allows the setting of multiple views instead of a single view.
+  setViews: function(views) {
+    // Iterate over all the views and use the View's view method to assign.
+    _.each(views, function(view, name) {
+      // If the view is an array put all views into insert mode.
+      if (_.isArray(view)) {
+        return _.each(view, function(view) {
+          this.insertView(name, view);
+        }, this);
+      }
+
+      // Assign each view using the view function.
+      this.setView(name, view);
+    }, this);
+
+    // Allow for chaining
+    return this;
+  },
+
+  // By default this should find all nested views and render them into
+  // the this.el and call done once all of them have successfully been
+  // resolved.
+  //
+  // This function returns a promise that can be chained to determine
+  // once all subviews and main view have been rendered into the view.el.
+  render: function() {
+    var root = this;
+    var options = root.getAllOptions();
+    var manager = root.__manager__;
+    var parent = manager.parent;
+    var rentManager = parent && parent.__manager__;
+    var def = options.deferred();
+
+    // Triggered once the render has succeeded.
+    function resolve() {
+      var next, afterRender;
+
+      // If there is a parent, attach.
+      if (parent) {
+        if (!options.contains(parent.el, root.el)) {
+          // Apply the partial.
+          options.partial(parent.$el, root.$el, rentManager, manager);
+        }
+      }
+
+      // Ensure events are always correctly bound after rendering.
+      root.delegateEvents();
+
+      // Set this View as successfully rendered.
+      manager.hasRendered = true;
+
+      // Only process the queue if it exists.
+      if (next = manager.queue.shift()) {
+        // Ensure that the next render is only called after all other
+        // `done` handlers have completed.  This will prevent `render`
+        // callbacks from firing out of order.
+        next();
+      } else {
+        // Once the queue is depleted, remove it, the render process has
+        // completed.
+        delete manager.queue;
+      }
+
+      // Reusable function for triggering the afterRender callback and event
+      // and setting the hasRendered flag.
+      function completeRender() {
+        var afterRender = options.afterRender;
+
+        if (afterRender) {
+          afterRender.call(root, root);
+        }
+
+        // Always emit an afterRender event.
+        root.trigger("afterRender", root);
+
+        // If there are multiple top level elements and `el: false` is used,
+        // display a warning message and a stack trace.
+        if (manager.noel && root.$el.length > 1) {
+          // Do not display a warning while testing or if warning suppression
+          // is enabled.
+          if (warn && !options.suppressWarnings) { 
+            window.console.warn("Using `el: false` with multiple top level " +
+              "elements is not supported.");
+
+            // Provide a stack trace if available to aid with debugging.
+            if (trace) { window.console.trace(); }
+          }
+        }
+      }
+
+      // If the parent is currently rendering, wait until it has completed
+      // until calling the nested View's `afterRender`.
+      if (rentManager && rentManager.queue) {
+        // Wait until the parent View has finished rendering, which could be
+        // asynchronous, and trigger afterRender on this View once it has
+        // compeleted.
+        parent.once("afterRender", completeRender);
+      } else {
+        // This View and its parent have both rendered.
+        completeRender();
+      }
+
+      return def.resolveWith(root, [root]);
+    }
+
+    // Actually facilitate a render.
+    function actuallyRender() {
+      var options = root.getAllOptions();
+      var manager = root.__manager__;
+      var parent = manager.parent;
+      var rentManager = parent && parent.__manager__;
+
+      // The `_viewRender` method is broken out to abstract away from having
+      // too much code in `actuallyRender`.
+      root._render(LayoutManager._viewRender, options).done(function() {
+        // If there are no children to worry about, complete the render
+        // instantly.
+        if (!_.keys(root.views).length) {
+          return resolve();
+        }
+
+        // Create a list of promises to wait on until rendering is done.
+        // Since this method will run on all children as well, its sufficient
+        // for a full hierarchical.
+        var promises = _.map(root.views, function(view) {
+          var insert = _.isArray(view);
+
+          // If items are being inserted, they will be in a non-zero length
+          // Array.
+          if (insert && view.length) {
+            // Schedule each view to be rendered in order and return a promise
+            // representing the result of the final rendering.
+            return _.reduce(view.slice(1), function(prevRender, view) {
+              return prevRender.then(function() {
+                return view.render();
+              });
+            // The first view should be rendered immediately, and the resulting
+            // promise used to initialize the reduction.
+            }, view[0].render());
+          }
+
+          // Only return the fetch deferred, resolve the main deferred after
+          // the element has been attached to it's parent.
+          return !insert ? view.render() : view;
+        });
+
+        // Once all nested Views have been rendered, resolve this View's
+        // deferred.
+        options.when(promises).done(resolve);
+      });
+    }
+
+    // Another render is currently happening if there is an existing queue, so
+    // push a closure to render later into the queue.
+    if (manager.queue) {
+      aPush.call(manager.queue, actuallyRender);
+    } else {
+      manager.queue = [];
+
+      // This the first `render`, preceeding the `queue` so render
+      // immediately.
+      actuallyRender(root, def);
+    }
+
+    // Add the View to the deferred so that `view.render().view.el` is
+    // possible.
+    def.view = root;
+
+    // This is the promise that determines if the `render` function has
+    // completed or not.
+    return def;
+  },
+
+  // Ensure the cleanup function is called whenever remove is called.
+  remove: function() {
+    // Force remove itself from its parent.
+    LayoutManager._removeView(this, true);
+
+    // Call the original remove function.
+    return this._remove.apply(this, arguments);
+  },
+
+  // Merge instance and global options.
+  getAllOptions: function() {
+    // Instance overrides take precedence, fallback to prototype options.
+    return _.extend({}, this, LayoutManager.prototype.options, this.options);
+  }
+},
+{
+  // Clearable cache.
+  _cache: {},
+
+  // Creates a deferred and returns a function to call when finished.
+  _makeAsync: function(options, done) {
+    var handler = options.deferred();
+
+    // Used to handle asynchronous renders.
+    handler.async = function() {
+      handler._isAsync = true;
+
+      return done;
+    };
+
+    return handler;
+  },
+
+  // This gets passed to all _render methods.  The `root` value here is passed
+  // from the `manage(this).render()` line in the `_render` function
+  _viewRender: function(root, options) {
+    var url, contents, fetchAsync, renderedEl;
+    var manager = root.__manager__;
+
+    // This function is responsible for pairing the rendered template into
+    // the DOM element.
+    function applyTemplate(rendered) {
+      // Actually put the rendered contents into the element.
+      if (_.isString(rendered)) {
+        // If no container is specified, we must replace the content.
+        if (manager.noel) {
+          // Trim off the whitespace, since the contents are passed into `$()`.
+          rendered = $.trim(rendered);
+
+          // Hold a reference to created element as replaceWith doesn't return
+          // new el.
+          renderedEl = $(rendered);
+
+          // Remove extra root elements.
+          root.$el.slice(1).remove();
+
+          // Swap out the View on the first top level element to avoid
+          // duplication.
+          root.$el.replaceWith(renderedEl);
+
+          // Don't delegate events here - we'll do that in resolve()
+          root.setElement(renderedEl, false);
+        } else {
+          options.html(root.$el, rendered);
+        }
+      }
+
+      // Resolve only after fetch and render have succeeded.
+      fetchAsync.resolveWith(root, [root]);
+    }
+
+    // Once the template is successfully fetched, use its contents to proceed.
+    // Context argument is first, since it is bound for partial application
+    // reasons.
+    function done(context, contents) {
+      // Store the rendered template someplace so it can be re-assignable.
+      var rendered;
+      // This allows the `render` method to be asynchronous as well as `fetch`.
+      var renderAsync = LayoutManager._makeAsync(options, function(rendered) {
+        applyTemplate(rendered);
+      });
+
+      // Ensure the cache is up-to-date.
+      LayoutManager.cache(url, contents);
+
+      // Render the View into the el property.
+      if (contents) {
+        rendered = options.render.call(renderAsync, contents, context);
+      }
+
+      // If the function was synchronous, continue execution.
+      if (!renderAsync._isAsync) {
+        applyTemplate(rendered);
+      }
+    }
+
+    return {
+      // This `render` function is what gets called inside of the View render,
+      // when `manage(this).render` is called.  Returns a promise that can be
+      // used to know when the element has been rendered into its parent.
+      render: function() {
+        var context = root.serialize || options.serialize;
+        var template = root.template || options.template;
+
+        // If data is a function, immediately call it.
+        if (_.isFunction(context)) {
+          context = context.call(root);
+        }
+
+        // This allows for `var done = this.async()` and then `done(contents)`.
+        fetchAsync = LayoutManager._makeAsync(options, function(contents) {
+          done(context, contents);
+        });
+
+        // Set the url to the prefix + the view's template property.
+        if (typeof template === "string") {
+          url = options.prefix + template;
+        }
+
+        // Check if contents are already cached and if they are, simply process
+        // the template with the correct data.
+        if (contents = LayoutManager.cache(url)) {
+          done(context, contents, url);
+
+          return fetchAsync;
+        }
+
+        // Fetch layout and template contents.
+        if (typeof template === "string") {
+          contents = options.fetch.call(fetchAsync, options.prefix + template);
+        // If the template is already a function, simply call it.
+        } else if (typeof template === "function") {
+          contents = template;
+        // If its not a string and not undefined, pass the value to `fetch`.
+        } else if (template != null) {
+          contents = options.fetch.call(fetchAsync, template);
+        }
+
+        // If the function was synchronous, continue execution.
+        if (!fetchAsync._isAsync) {
+          done(context, contents);
+        }
+
+        return fetchAsync;
+      }
+    };
+  },
+
+  // Remove all nested Views.
+  _removeViews: function(root, force) {
+    var views;
+
+    // Shift arguments around.
+    if (typeof root === "boolean") {
+      force = root;
+      root = this;
+    }
+
+    // Allow removeView to be called on instances.
+    root = root || this;
+
+    // Iterate over all of the nested View's and remove.
+    root.getViews().each(function(view) {
+      // Force doesn't care about if a View has rendered or not.
+      if (view.__manager__.hasRendered || force) {
+        LayoutManager._removeView(view, force);
+      }
+    });
+  },
+
+  // Remove a single nested View.
+  _removeView: function(view, force) {
+    var parentViews;
+    // Shorthand the manager for easier access.
+    var manager = view.__manager__;
+    // Test for keep.
+    var keep = typeof view.keep === "boolean" ? view.keep : view.options.keep;
+
+    // Only remove views that do not have `keep` attribute set, unless the
+    // View is in `insert` mode and the force flag is set.
+    if ((!keep && manager.insert === true) || force) {
+      // Clean out the events.
+      LayoutManager.cleanViews(view);
+
+      // Since we are removing this view, force subviews to remove
+      view._removeViews(true);
+
+      // Remove the View completely.
+      view.$el.remove();
+
+      // Bail out early if no parent exists.
+      if (!manager.parent) { return; }
+
+      // Assign (if they exist) the sibling Views to a property.
+      parentViews = manager.parent.views[manager.selector];
+
+      // If this is an array of items remove items that are not marked to
+      // keep.
+      if (_.isArray(parentViews)) {
+        // Remove duplicate Views.
+        return _.each(_.clone(parentViews), function(view, i) {
+          // If the managers match, splice off this View.
+          if (view && view.__manager__ === manager) {
+            aSplice.call(parentViews, i, 1);
+          }
+        });
+      }
+
+      // Otherwise delete the parent selector.
+      delete manager.parent.views[manager.selector];
+    }
+  },
+
+  // Cache templates into LayoutManager._cache.
+  cache: function(path, contents) {
+    // If template path is found in the cache, return the contents.
+    if (path in this._cache && contents == null) {
+      return this._cache[path];
+    // Ensure path and contents aren't undefined.
+    } else if (path != null && contents != null) {
+      return this._cache[path] = contents;
+    }
+
+    // If the template is not in the cache, return undefined.
+  },
+
+  // Accept either a single view or an array of views to clean of all DOM
+  // events internal model and collection references and all Backbone.Events.
+  cleanViews: function(views) {
+    // Clear out all existing views.
+    _.each(aConcat.call([], views), function(view) {
+      var cleanup;
+
+      // Remove all custom events attached to this View.
+      view.unbind();
+
+      // Automatically unbind `model`.
+      if (view.model instanceof Backbone.Model) {
+        view.model.off(null, null, view);
+      }
+
+      // Automatically unbind `collection`.
+      if (view.collection instanceof Backbone.Collection) {
+        view.collection.off(null, null, view);
+      }
+
+      // Automatically unbind events bound to this View.
+      view.stopListening();
+
+      // If a custom cleanup method was provided on the view, call it after
+      // the initial cleanup is done
+      cleanup = view.getAllOptions().cleanup;
+      if (_.isFunction(cleanup)) {
+        cleanup.call(view);
+      }
+    });
+  },
+
+  // This static method allows for global configuration of LayoutManager.
+  configure: function(options) {
+    _.extend(LayoutManager.prototype.options, options);
+
+    // Allow LayoutManager to manage Backbone.View.prototype.
+    if (options.manage) {
+      Backbone.View.prototype.manage = true;
+    }
+
+    // Disable the element globally.
+    if (options.el === false) {
+      Backbone.View.prototype.el = false;
+    }
+
+    // Allow global configuration of `suppressWarnings`.
+    if (options.suppressWarnings === true) {
+      Backbone.View.prototype.suppressWarnings = true;
+    }
+  },
+
+  // Configure a View to work with the LayoutManager plugin.
+  setupView: function(views, options) {
+    // Set up all Views passed.
+    _.each(aConcat.call([], views), function(view) {
+      // If the View has already been setup, no need to do it again.
+      if (view.__manager__) {
+        return;
+      }
+
+      var views, declaredViews, viewOptions;
+      var proto = LayoutManager.prototype;
+      var viewOverrides = _.pick(view, keys);
+
+      // Ensure necessary properties are set.
+      _.defaults(view, {
+        // Ensure a view always has a views object.
+        views: {},
+
+        // Internal state object used to store whether or not a View has been
+        // taken over by layout manager and if it has been rendered into the
+        // DOM.
+        __manager__: {},
+
+        // Add the ability to remove all Views.
+        _removeViews: LayoutManager._removeViews,
+
+        // Add the ability to remove itself.
+        _removeView: LayoutManager._removeView
+
+      // Mix in all LayoutManager prototype properties as well.
+      }, LayoutManager.prototype);
+
+      // Extend the options with the prototype and passed options.
+      options = view.options = _.defaults(options || {}, view.options,
+        proto.options);
+
+      // Ensure view events are properly copied over.
+      viewOptions = _.pick(options, aConcat.call(["events"],
+        _.values(options.events)));
+
+      // Merge the View options into the View.
+      _.extend(view, viewOptions);
+
+      // If the View still has the Backbone.View#render method, remove it.
+      // Don't want it accidentally overriding the LM render.
+      if (viewOverrides.render === LayoutManager.prototype.render ||
+        viewOverrides.render === Backbone.View.prototype.render) {
+        delete viewOverrides.render;
+      }
+
+      // Pick out the specific properties that can be dynamically added at
+      // runtime and ensure they are available on the view object.
+      _.extend(options, viewOverrides);
+
+      // By default the original Remove function is the Backbone.View one.
+      view._remove = Backbone.View.prototype.remove;
+
+      // Always use this render function when using LayoutManager.
+      view._render = function(manage, options) {
+        // Keep the view consistent between callbacks and deferreds.
+        var view = this;
+        // Shorthand the manager.
+        var manager = view.__manager__;
+        // Cache these properties.
+        var beforeRender = options.beforeRender;
+
+        // Ensure all nested Views are properly scrubbed if re-rendering.
+        if (manager.hasRendered) {
+          this._removeViews();
+        }
+
+        // If a beforeRender function is defined, call it.
+        if (beforeRender) {
+          beforeRender.call(this, this);
+        }
+
+        // Always emit a beforeRender event.
+        this.trigger("beforeRender", this);
+
+        // Render!
+        return manage(this, options).render();
+      };
+
+      // Ensure the render is always set correctly.
+      view.render = LayoutManager.prototype.render;
+
+      // If the user provided their own remove override, use that instead of
+      // the default.
+      if (view.remove !== proto.remove) {
+        view._remove = view.remove;
+        view.remove = proto.remove;
+      }
+
+      // Normalize views to exist on either instance or options, default to
+      // options.
+      views = options.views || view.views;
+
+      // Set the internal views, only if selectors have been provided.
+      if (_.keys(views).length) {
+        // Keep original object declared containing Views.
+        declaredViews = views;
+
+        // Reset the property to avoid duplication or overwritting.
+        view.views = {};
+
+        // Set the declared Views.
+        view.setViews(declaredViews);
+      }
+
+      // If a template is passed use that instead.
+      if (view.options.template) {
+        view.options.template = options.template;
+      // Ensure the template is mapped over.
+      } else if (view.template) {
+        options.template = view.template;
+      }
+    });
+  }
+});
+
+// Convenience assignment to make creating Layout's slightly shorter.
+Backbone.Layout = LayoutManager;
+// Tack on the version.
+LayoutManager.VERSION = "0.8.8";
+
+// Override _configure to provide extra functionality that is necessary in
+// order for the render function reference to be bound during initialize.
+Backbone.View.prototype._configure = function(options) {
+  var noel, retVal;
+
+  // Remove the container element provided by Backbone.
+  if ("el" in options ? options.el === false : this.el === false) {
+    noel = true;
+  }
+
+  // Run the original _configure.
+  retVal = _configure.apply(this, arguments);
+
+  // If manage is set, do it!
+  if (options.manage || this.manage) {
+    // Set up this View.
+    LayoutManager.setupView(this);
+  }
+
+  // Assign the `noel` property once we're sure the View we're working with is
+  // managed by LayoutManager.
+  if (this.__manager__) {
+    this.__manager__.noel = noel;
+    this.__manager__.suppressWarnings = options.suppressWarnings;
+  }
+
+  // Act like nothing happened.
+  return retVal;
+};
+
+// Default configuration options; designed to be overriden.
+LayoutManager.prototype.options = {
+  // Prefix template/layout paths.
+  prefix: "",
+
+  // Can be used to supply a different deferred implementation.
+  deferred: function() {
+    return $.Deferred();
+  },
+
+  // Fetch is passed a path and is expected to return template contents as a
+  // function or string.
+  fetch: function(path) {
+    return _.template($(path).html());
+  },
+
+  // This is the most common way you will want to partially apply a view into
+  // a layout.
+  partial: function($root, $el, rentManager, manager) {
+    // If selector is specified, attempt to find it.
+    if (manager.selector) {
+      if (rentManager.noel) {
+        var $filtered = $root.filter(manager.selector);
+        $root = $filtered.length ? $filtered : $root.find(manager.selector);
+      } else {
+        $root = $root.find(manager.selector);
+      }
+    }
+
+    // Use the insert method if insert argument is true.
+    if (manager.insert) {
+      this.insert($root, $el);
+    } else {
+      this.html($root, $el);
+    }
+  },
+
+  // Override this with a custom HTML method, passed a root element and content
+  // (a jQuery collection or a string) to replace the innerHTML with.
+  html: function($root, content) {
+    $root.html(content);
+  },
+
+  // Very similar to HTML except this one will appendChild by default.
+  insert: function($root, $el) {
+    $root.append($el);
+  },
+
+  // Return a deferred for when all promises resolve/reject.
+  when: function(promises) {
+    return $.when.apply(null, promises);
+  },
+
+  // By default, render using underscore's templating.
+  render: function(template, context) {
+    return template(context);
+  },
+
+  // A method to determine if a View contains another.
+  contains: function(parent, child) {
+    return $.contains(parent, child);
+  }
+};
+
+// Maintain a list of the keys at define time.
+keys = _.keys(LayoutManager.prototype.options);
+
+})(typeof global === "object" ? global : this);
+
+define("backbone.layoutmanager", ["jquery","backbone","underscore"], (function (global) {
+    return function () {
+        var ret, fn;
+        return ret || global.Backbone.Layout;
+    };
+}(this)));
+
 /**
  * two.js
  * a two-dimensional drawing api meant for modern browsers. It is renderer 
@@ -19401,2308 +20324,18 @@ define("two", (function (global) {
 !function(e){e(function(){e.support.transition=function(){var e=function(){var e=document.createElement("bootstrap"),t={WebkitTransition:"webkitTransitionEnd",MozTransition:"transitionend",OTransition:"oTransitionEnd otransitionend",transition:"transitionend"},n;for(n in t)if(e.style[n]!==undefined)return t[n]}();return e&&{end:e}}()})}(window.jQuery),!function(e){var t='[data-dismiss="alert"]',n=function(n){e(n).on("click",t,this.close)};n.prototype.close=function(t){function s(){i.trigger("closed").remove()}var n=e(this),r=n.attr("data-target"),i;r||(r=n.attr("href"),r=r&&r.replace(/.*(?=#[^\s]*$)/,"")),i=e(r),t&&t.preventDefault(),i.length||(i=n.hasClass("alert")?n:n.parent()),i.trigger(t=e.Event("close"));if(t.isDefaultPrevented())return;i.removeClass("in"),e.support.transition&&i.hasClass("fade")?i.on(e.support.transition.end,s):s()};var r=e.fn.alert;e.fn.alert=function(t){return this.each(function(){var r=e(this),i=r.data("alert");i||r.data("alert",i=new n(this)),typeof t=="string"&&i[t].call(r)})},e.fn.alert.Constructor=n,e.fn.alert.noConflict=function(){return e.fn.alert=r,this},e(document).on("click.alert.data-api",t,n.prototype.close)}(window.jQuery),!function(e){var t=function(t,n){this.$element=e(t),this.options=e.extend({},e.fn.button.defaults,n)};t.prototype.setState=function(e){var t="disabled",n=this.$element,r=n.data(),i=n.is("input")?"val":"html";e+="Text",r.resetText||n.data("resetText",n[i]()),n[i](r[e]||this.options[e]),setTimeout(function(){e=="loadingText"?n.addClass(t).attr(t,t):n.removeClass(t).removeAttr(t)},0)},t.prototype.toggle=function(){var e=this.$element.closest('[data-toggle="buttons-radio"]');e&&e.find(".active").removeClass("active"),this.$element.toggleClass("active")};var n=e.fn.button;e.fn.button=function(n){return this.each(function(){var r=e(this),i=r.data("button"),s=typeof n=="object"&&n;i||r.data("button",i=new t(this,s)),n=="toggle"?i.toggle():n&&i.setState(n)})},e.fn.button.defaults={loadingText:"loading..."},e.fn.button.Constructor=t,e.fn.button.noConflict=function(){return e.fn.button=n,this},e(document).on("click.button.data-api","[data-toggle^=button]",function(t){var n=e(t.target);n.hasClass("btn")||(n=n.closest(".btn")),n.button("toggle")})}(window.jQuery),!function(e){var t=function(t,n){this.$element=e(t),this.$indicators=this.$element.find(".carousel-indicators"),this.options=n,this.options.pause=="hover"&&this.$element.on("mouseenter",e.proxy(this.pause,this)).on("mouseleave",e.proxy(this.cycle,this))};t.prototype={cycle:function(t){return t||(this.paused=!1),this.interval&&clearInterval(this.interval),this.options.interval&&!this.paused&&(this.interval=setInterval(e.proxy(this.next,this),this.options.interval)),this},getActiveIndex:function(){return this.$active=this.$element.find(".item.active"),this.$items=this.$active.parent().children(),this.$items.index(this.$active)},to:function(t){var n=this.getActiveIndex(),r=this;if(t>this.$items.length-1||t<0)return;return this.sliding?this.$element.one("slid",function(){r.to(t)}):n==t?this.pause().cycle():this.slide(t>n?"next":"prev",e(this.$items[t]))},pause:function(t){return t||(this.paused=!0),this.$element.find(".next, .prev").length&&e.support.transition.end&&(this.$element.trigger(e.support.transition.end),this.cycle(!0)),clearInterval(this.interval),this.interval=null,this},next:function(){if(this.sliding)return;return this.slide("next")},prev:function(){if(this.sliding)return;return this.slide("prev")},slide:function(t,n){var r=this.$element.find(".item.active"),i=n||r[t](),s=this.interval,o=t=="next"?"left":"right",u=t=="next"?"first":"last",a=this,f;this.sliding=!0,s&&this.pause(),i=i.length?i:this.$element.find(".item")[u](),f=e.Event("slide",{relatedTarget:i[0],direction:o});if(i.hasClass("active"))return;this.$indicators.length&&(this.$indicators.find(".active").removeClass("active"),this.$element.one("slid",function(){var t=e(a.$indicators.children()[a.getActiveIndex()]);t&&t.addClass("active")}));if(e.support.transition&&this.$element.hasClass("slide")){this.$element.trigger(f);if(f.isDefaultPrevented())return;i.addClass(t),i[0].offsetWidth,r.addClass(o),i.addClass(o),this.$element.one(e.support.transition.end,function(){i.removeClass([t,o].join(" ")).addClass("active"),r.removeClass(["active",o].join(" ")),a.sliding=!1,setTimeout(function(){a.$element.trigger("slid")},0)})}else{this.$element.trigger(f);if(f.isDefaultPrevented())return;r.removeClass("active"),i.addClass("active"),this.sliding=!1,this.$element.trigger("slid")}return s&&this.cycle(),this}};var n=e.fn.carousel;e.fn.carousel=function(n){return this.each(function(){var r=e(this),i=r.data("carousel"),s=e.extend({},e.fn.carousel.defaults,typeof n=="object"&&n),o=typeof n=="string"?n:s.slide;i||r.data("carousel",i=new t(this,s)),typeof n=="number"?i.to(n):o?i[o]():s.interval&&i.pause().cycle()})},e.fn.carousel.defaults={interval:5e3,pause:"hover"},e.fn.carousel.Constructor=t,e.fn.carousel.noConflict=function(){return e.fn.carousel=n,this},e(document).on("click.carousel.data-api","[data-slide], [data-slide-to]",function(t){var n=e(this),r,i=e(n.attr("data-target")||(r=n.attr("href"))&&r.replace(/.*(?=#[^\s]+$)/,"")),s=e.extend({},i.data(),n.data()),o;i.carousel(s),(o=n.attr("data-slide-to"))&&i.data("carousel").pause().to(o).cycle(),t.preventDefault()})}(window.jQuery),!function(e){var t=function(t,n){this.$element=e(t),this.options=e.extend({},e.fn.collapse.defaults,n),this.options.parent&&(this.$parent=e(this.options.parent)),this.options.toggle&&this.toggle()};t.prototype={constructor:t,dimension:function(){var e=this.$element.hasClass("width");return e?"width":"height"},show:function(){var t,n,r,i;if(this.transitioning||this.$element.hasClass("in"))return;t=this.dimension(),n=e.camelCase(["scroll",t].join("-")),r=this.$parent&&this.$parent.find("> .accordion-group > .in");if(r&&r.length){i=r.data("collapse");if(i&&i.transitioning)return;r.collapse("hide"),i||r.data("collapse",null)}this.$element[t](0),this.transition("addClass",e.Event("show"),"shown"),e.support.transition&&this.$element[t](this.$element[0][n])},hide:function(){var t;if(this.transitioning||!this.$element.hasClass("in"))return;t=this.dimension(),this.reset(this.$element[t]()),this.transition("removeClass",e.Event("hide"),"hidden"),this.$element[t](0)},reset:function(e){var t=this.dimension();return this.$element.removeClass("collapse")[t](e||"auto")[0].offsetWidth,this.$element[e!==null?"addClass":"removeClass"]("collapse"),this},transition:function(t,n,r){var i=this,s=function(){n.type=="show"&&i.reset(),i.transitioning=0,i.$element.trigger(r)};this.$element.trigger(n);if(n.isDefaultPrevented())return;this.transitioning=1,this.$element[t]("in"),e.support.transition&&this.$element.hasClass("collapse")?this.$element.one(e.support.transition.end,s):s()},toggle:function(){this[this.$element.hasClass("in")?"hide":"show"]()}};var n=e.fn.collapse;e.fn.collapse=function(n){return this.each(function(){var r=e(this),i=r.data("collapse"),s=e.extend({},e.fn.collapse.defaults,r.data(),typeof n=="object"&&n);i||r.data("collapse",i=new t(this,s)),typeof n=="string"&&i[n]()})},e.fn.collapse.defaults={toggle:!0},e.fn.collapse.Constructor=t,e.fn.collapse.noConflict=function(){return e.fn.collapse=n,this},e(document).on("click.collapse.data-api","[data-toggle=collapse]",function(t){var n=e(this),r,i=n.attr("data-target")||t.preventDefault()||(r=n.attr("href"))&&r.replace(/.*(?=#[^\s]+$)/,""),s=e(i).data("collapse")?"toggle":n.data();n[e(i).hasClass("in")?"addClass":"removeClass"]("collapsed"),e(i).collapse(s)})}(window.jQuery),!function(e){function r(){e(".dropdown-backdrop").remove(),e(t).each(function(){i(e(this)).removeClass("open")})}function i(t){var n=t.attr("data-target"),r;n||(n=t.attr("href"),n=n&&/#/.test(n)&&n.replace(/.*(?=#[^\s]*$)/,"")),r=n&&e(n);if(!r||!r.length)r=t.parent();return r}var t="[data-toggle=dropdown]",n=function(t){var n=e(t).on("click.dropdown.data-api",this.toggle);e("html").on("click.dropdown.data-api",function(){n.parent().removeClass("open")})};n.prototype={constructor:n,toggle:function(t){var n=e(this),s,o;if(n.is(".disabled, :disabled"))return;return s=i(n),o=s.hasClass("open"),r(),o||("ontouchstart"in document.documentElement&&e('<div class="dropdown-backdrop"/>').insertBefore(e(this)).on("click",r),s.toggleClass("open")),n.focus(),!1},keydown:function(n){var r,s,o,u,a,f;if(!/(38|40|27)/.test(n.keyCode))return;r=e(this),n.preventDefault(),n.stopPropagation();if(r.is(".disabled, :disabled"))return;u=i(r),a=u.hasClass("open");if(!a||a&&n.keyCode==27)return n.which==27&&u.find(t).focus(),r.click();s=e("[role=menu] li:not(.divider):visible a",u);if(!s.length)return;f=s.index(s.filter(":focus")),n.keyCode==38&&f>0&&f--,n.keyCode==40&&f<s.length-1&&f++,~f||(f=0),s.eq(f).focus()}};var s=e.fn.dropdown;e.fn.dropdown=function(t){return this.each(function(){var r=e(this),i=r.data("dropdown");i||r.data("dropdown",i=new n(this)),typeof t=="string"&&i[t].call(r)})},e.fn.dropdown.Constructor=n,e.fn.dropdown.noConflict=function(){return e.fn.dropdown=s,this},e(document).on("click.dropdown.data-api",r).on("click.dropdown.data-api",".dropdown form",function(e){e.stopPropagation()}).on("click.dropdown.data-api",t,n.prototype.toggle).on("keydown.dropdown.data-api",t+", [role=menu]",n.prototype.keydown)}(window.jQuery),!function(e){var t=function(t,n){this.options=n,this.$element=e(t).delegate('[data-dismiss="modal"]',"click.dismiss.modal",e.proxy(this.hide,this)),this.options.remote&&this.$element.find(".modal-body").load(this.options.remote)};t.prototype={constructor:t,toggle:function(){return this[this.isShown?"hide":"show"]()},show:function(){var t=this,n=e.Event("show");this.$element.trigger(n);if(this.isShown||n.isDefaultPrevented())return;this.isShown=!0,this.escape(),this.backdrop(function(){var n=e.support.transition&&t.$element.hasClass("fade");t.$element.parent().length||t.$element.appendTo(document.body),t.$element.show(),n&&t.$element[0].offsetWidth,t.$element.addClass("in").attr("aria-hidden",!1),t.enforceFocus(),n?t.$element.one(e.support.transition.end,function(){t.$element.focus().trigger("shown")}):t.$element.focus().trigger("shown")})},hide:function(t){t&&t.preventDefault();var n=this;t=e.Event("hide"),this.$element.trigger(t);if(!this.isShown||t.isDefaultPrevented())return;this.isShown=!1,this.escape(),e(document).off("focusin.modal"),this.$element.removeClass("in").attr("aria-hidden",!0),e.support.transition&&this.$element.hasClass("fade")?this.hideWithTransition():this.hideModal()},enforceFocus:function(){var t=this;e(document).on("focusin.modal",function(e){t.$element[0]!==e.target&&!t.$element.has(e.target).length&&t.$element.focus()})},escape:function(){var e=this;this.isShown&&this.options.keyboard?this.$element.on("keyup.dismiss.modal",function(t){t.which==27&&e.hide()}):this.isShown||this.$element.off("keyup.dismiss.modal")},hideWithTransition:function(){var t=this,n=setTimeout(function(){t.$element.off(e.support.transition.end),t.hideModal()},500);this.$element.one(e.support.transition.end,function(){clearTimeout(n),t.hideModal()})},hideModal:function(){var e=this;this.$element.hide(),this.backdrop(function(){e.removeBackdrop(),e.$element.trigger("hidden")})},removeBackdrop:function(){this.$backdrop&&this.$backdrop.remove(),this.$backdrop=null},backdrop:function(t){var n=this,r=this.$element.hasClass("fade")?"fade":"";if(this.isShown&&this.options.backdrop){var i=e.support.transition&&r;this.$backdrop=e('<div class="modal-backdrop '+r+'" />').appendTo(document.body),this.$backdrop.click(this.options.backdrop=="static"?e.proxy(this.$element[0].focus,this.$element[0]):e.proxy(this.hide,this)),i&&this.$backdrop[0].offsetWidth,this.$backdrop.addClass("in");if(!t)return;i?this.$backdrop.one(e.support.transition.end,t):t()}else!this.isShown&&this.$backdrop?(this.$backdrop.removeClass("in"),e.support.transition&&this.$element.hasClass("fade")?this.$backdrop.one(e.support.transition.end,t):t()):t&&t()}};var n=e.fn.modal;e.fn.modal=function(n){return this.each(function(){var r=e(this),i=r.data("modal"),s=e.extend({},e.fn.modal.defaults,r.data(),typeof n=="object"&&n);i||r.data("modal",i=new t(this,s)),typeof n=="string"?i[n]():s.show&&i.show()})},e.fn.modal.defaults={backdrop:!0,keyboard:!0,show:!0},e.fn.modal.Constructor=t,e.fn.modal.noConflict=function(){return e.fn.modal=n,this},e(document).on("click.modal.data-api",'[data-toggle="modal"]',function(t){var n=e(this),r=n.attr("href"),i=e(n.attr("data-target")||r&&r.replace(/.*(?=#[^\s]+$)/,"")),s=i.data("modal")?"toggle":e.extend({remote:!/#/.test(r)&&r},i.data(),n.data());t.preventDefault(),i.modal(s).one("hide",function(){n.focus()})})}(window.jQuery),!function(e){var t=function(e,t){this.init("tooltip",e,t)};t.prototype={constructor:t,init:function(t,n,r){var i,s,o,u,a;this.type=t,this.$element=e(n),this.options=this.getOptions(r),this.enabled=!0,o=this.options.trigger.split(" ");for(a=o.length;a--;)u=o[a],u=="click"?this.$element.on("click."+this.type,this.options.selector,e.proxy(this.toggle,this)):u!="manual"&&(i=u=="hover"?"mouseenter":"focus",s=u=="hover"?"mouseleave":"blur",this.$element.on(i+"."+this.type,this.options.selector,e.proxy(this.enter,this)),this.$element.on(s+"."+this.type,this.options.selector,e.proxy(this.leave,this)));this.options.selector?this._options=e.extend({},this.options,{trigger:"manual",selector:""}):this.fixTitle()},getOptions:function(t){return t=e.extend({},e.fn[this.type].defaults,this.$element.data(),t),t.delay&&typeof t.delay=="number"&&(t.delay={show:t.delay,hide:t.delay}),t},enter:function(t){var n=e.fn[this.type].defaults,r={},i;this._options&&e.each(this._options,function(e,t){n[e]!=t&&(r[e]=t)},this),i=e(t.currentTarget)[this.type](r).data(this.type);if(!i.options.delay||!i.options.delay.show)return i.show();clearTimeout(this.timeout),i.hoverState="in",this.timeout=setTimeout(function(){i.hoverState=="in"&&i.show()},i.options.delay.show)},leave:function(t){var n=e(t.currentTarget)[this.type](this._options).data(this.type);this.timeout&&clearTimeout(this.timeout);if(!n.options.delay||!n.options.delay.hide)return n.hide();n.hoverState="out",this.timeout=setTimeout(function(){n.hoverState=="out"&&n.hide()},n.options.delay.hide)},show:function(){var t,n,r,i,s,o,u=e.Event("show");if(this.hasContent()&&this.enabled){this.$element.trigger(u);if(u.isDefaultPrevented())return;t=this.tip(),this.setContent(),this.options.animation&&t.addClass("fade"),s=typeof this.options.placement=="function"?this.options.placement.call(this,t[0],this.$element[0]):this.options.placement,t.detach().css({top:0,left:0,display:"block"}),this.options.container?t.appendTo(this.options.container):t.insertAfter(this.$element),n=this.getPosition(),r=t[0].offsetWidth,i=t[0].offsetHeight;switch(s){case"bottom":o={top:n.top+n.height,left:n.left+n.width/2-r/2};break;case"top":o={top:n.top-i,left:n.left+n.width/2-r/2};break;case"left":o={top:n.top+n.height/2-i/2,left:n.left-r};break;case"right":o={top:n.top+n.height/2-i/2,left:n.left+n.width}}this.applyPlacement(o,s),this.$element.trigger("shown")}},applyPlacement:function(e,t){var n=this.tip(),r=n[0].offsetWidth,i=n[0].offsetHeight,s,o,u,a;n.offset(e).addClass(t).addClass("in"),s=n[0].offsetWidth,o=n[0].offsetHeight,t=="top"&&o!=i&&(e.top=e.top+i-o,a=!0),t=="bottom"||t=="top"?(u=0,e.left<0&&(u=e.left*-2,e.left=0,n.offset(e),s=n[0].offsetWidth,o=n[0].offsetHeight),this.replaceArrow(u-r+s,s,"left")):this.replaceArrow(o-i,o,"top"),a&&n.offset(e)},replaceArrow:function(e,t,n){this.arrow().css(n,e?50*(1-e/t)+"%":"")},setContent:function(){var e=this.tip(),t=this.getTitle();e.find(".tooltip-inner")[this.options.html?"html":"text"](t),e.removeClass("fade in top bottom left right")},hide:function(){function i(){var t=setTimeout(function(){n.off(e.support.transition.end).detach()},500);n.one(e.support.transition.end,function(){clearTimeout(t),n.detach()})}var t=this,n=this.tip(),r=e.Event("hide");this.$element.trigger(r);if(r.isDefaultPrevented())return;return n.removeClass("in"),e.support.transition&&this.$tip.hasClass("fade")?i():n.detach(),this.$element.trigger("hidden"),this},fixTitle:function(){var e=this.$element;(e.attr("title")||typeof e.attr("data-original-title")!="string")&&e.attr("data-original-title",e.attr("title")||"").attr("title","")},hasContent:function(){return this.getTitle()},getPosition:function(){var t=this.$element[0];return e.extend({},typeof t.getBoundingClientRect=="function"?t.getBoundingClientRect():{width:t.offsetWidth,height:t.offsetHeight},this.$element.offset())},getTitle:function(){var e,t=this.$element,n=this.options;return e=t.attr("data-original-title")||(typeof n.title=="function"?n.title.call(t[0]):n.title),e},tip:function(){return this.$tip=this.$tip||e(this.options.template)},arrow:function(){return this.$arrow=this.$arrow||this.tip().find(".tooltip-arrow")},validate:function(){this.$element[0].parentNode||(this.hide(),this.$element=null,this.options=null)},enable:function(){this.enabled=!0},disable:function(){this.enabled=!1},toggleEnabled:function(){this.enabled=!this.enabled},toggle:function(t){var n=t?e(t.currentTarget)[this.type](this._options).data(this.type):this;n.tip().hasClass("in")?n.hide():n.show()},destroy:function(){this.hide().$element.off("."+this.type).removeData(this.type)}};var n=e.fn.tooltip;e.fn.tooltip=function(n){return this.each(function(){var r=e(this),i=r.data("tooltip"),s=typeof n=="object"&&n;i||r.data("tooltip",i=new t(this,s)),typeof n=="string"&&i[n]()})},e.fn.tooltip.Constructor=t,e.fn.tooltip.defaults={animation:!0,placement:"top",selector:!1,template:'<div class="tooltip"><div class="tooltip-arrow"></div><div class="tooltip-inner"></div></div>',trigger:"hover focus",title:"",delay:0,html:!1,container:!1},e.fn.tooltip.noConflict=function(){return e.fn.tooltip=n,this}}(window.jQuery),!function(e){var t=function(e,t){this.init("popover",e,t)};t.prototype=e.extend({},e.fn.tooltip.Constructor.prototype,{constructor:t,setContent:function(){var e=this.tip(),t=this.getTitle(),n=this.getContent();e.find(".popover-title")[this.options.html?"html":"text"](t),e.find(".popover-content")[this.options.html?"html":"text"](n),e.removeClass("fade top bottom left right in")},hasContent:function(){return this.getTitle()||this.getContent()},getContent:function(){var e,t=this.$element,n=this.options;return e=(typeof n.content=="function"?n.content.call(t[0]):n.content)||t.attr("data-content"),e},tip:function(){return this.$tip||(this.$tip=e(this.options.template)),this.$tip},destroy:function(){this.hide().$element.off("."+this.type).removeData(this.type)}});var n=e.fn.popover;e.fn.popover=function(n){return this.each(function(){var r=e(this),i=r.data("popover"),s=typeof n=="object"&&n;i||r.data("popover",i=new t(this,s)),typeof n=="string"&&i[n]()})},e.fn.popover.Constructor=t,e.fn.popover.defaults=e.extend({},e.fn.tooltip.defaults,{placement:"right",trigger:"click",content:"",template:'<div class="popover"><div class="arrow"></div><h3 class="popover-title"></h3><div class="popover-content"></div></div>'}),e.fn.popover.noConflict=function(){return e.fn.popover=n,this}}(window.jQuery),!function(e){function t(t,n){var r=e.proxy(this.process,this),i=e(t).is("body")?e(window):e(t),s;this.options=e.extend({},e.fn.scrollspy.defaults,n),this.$scrollElement=i.on("scroll.scroll-spy.data-api",r),this.selector=(this.options.target||(s=e(t).attr("href"))&&s.replace(/.*(?=#[^\s]+$)/,"")||"")+" .nav li > a",this.$body=e("body"),this.refresh(),this.process()}t.prototype={constructor:t,refresh:function(){var t=this,n;this.offsets=e([]),this.targets=e([]),n=this.$body.find(this.selector).map(function(){var n=e(this),r=n.data("target")||n.attr("href"),i=/^#\w/.test(r)&&e(r);return i&&i.length&&[[i.position().top+(!e.isWindow(t.$scrollElement.get(0))&&t.$scrollElement.scrollTop()),r]]||null}).sort(function(e,t){return e[0]-t[0]}).each(function(){t.offsets.push(this[0]),t.targets.push(this[1])})},process:function(){var e=this.$scrollElement.scrollTop()+this.options.offset,t=this.$scrollElement[0].scrollHeight||this.$body[0].scrollHeight,n=t-this.$scrollElement.height(),r=this.offsets,i=this.targets,s=this.activeTarget,o;if(e>=n)return s!=(o=i.last()[0])&&this.activate(o);for(o=r.length;o--;)s!=i[o]&&e>=r[o]&&(!r[o+1]||e<=r[o+1])&&this.activate(i[o])},activate:function(t){var n,r;this.activeTarget=t,e(this.selector).parent(".active").removeClass("active"),r=this.selector+'[data-target="'+t+'"],'+this.selector+'[href="'+t+'"]',n=e(r).parent("li").addClass("active"),n.parent(".dropdown-menu").length&&(n=n.closest("li.dropdown").addClass("active")),n.trigger("activate")}};var n=e.fn.scrollspy;e.fn.scrollspy=function(n){return this.each(function(){var r=e(this),i=r.data("scrollspy"),s=typeof n=="object"&&n;i||r.data("scrollspy",i=new t(this,s)),typeof n=="string"&&i[n]()})},e.fn.scrollspy.Constructor=t,e.fn.scrollspy.defaults={offset:10},e.fn.scrollspy.noConflict=function(){return e.fn.scrollspy=n,this},e(window).on("load",function(){e('[data-spy="scroll"]').each(function(){var t=e(this);t.scrollspy(t.data())})})}(window.jQuery),!function(e){var t=function(t){this.element=e(t)};t.prototype={constructor:t,show:function(){var t=this.element,n=t.closest("ul:not(.dropdown-menu)"),r=t.attr("data-target"),i,s,o;r||(r=t.attr("href"),r=r&&r.replace(/.*(?=#[^\s]*$)/,""));if(t.parent("li").hasClass("active"))return;i=n.find(".active:last a")[0],o=e.Event("show",{relatedTarget:i}),t.trigger(o);if(o.isDefaultPrevented())return;s=e(r),this.activate(t.parent("li"),n),this.activate(s,s.parent(),function(){t.trigger({type:"shown",relatedTarget:i})})},activate:function(t,n,r){function o(){i.removeClass("active").find("> .dropdown-menu > .active").removeClass("active"),t.addClass("active"),s?(t[0].offsetWidth,t.addClass("in")):t.removeClass("fade"),t.parent(".dropdown-menu")&&t.closest("li.dropdown").addClass("active"),r&&r()}var i=n.find("> .active"),s=r&&e.support.transition&&i.hasClass("fade");s?i.one(e.support.transition.end,o):o(),i.removeClass("in")}};var n=e.fn.tab;e.fn.tab=function(n){return this.each(function(){var r=e(this),i=r.data("tab");i||r.data("tab",i=new t(this)),typeof n=="string"&&i[n]()})},e.fn.tab.Constructor=t,e.fn.tab.noConflict=function(){return e.fn.tab=n,this},e(document).on("click.tab.data-api",'[data-toggle="tab"], [data-toggle="pill"]',function(t){t.preventDefault(),e(this).tab("show")})}(window.jQuery),!function(e){var t=function(t,n){this.$element=e(t),this.options=e.extend({},e.fn.typeahead.defaults,n),this.matcher=this.options.matcher||this.matcher,this.sorter=this.options.sorter||this.sorter,this.highlighter=this.options.highlighter||this.highlighter,this.updater=this.options.updater||this.updater,this.source=this.options.source,this.$menu=e(this.options.menu),this.shown=!1,this.listen()};t.prototype={constructor:t,select:function(){var e=this.$menu.find(".active").attr("data-value");return this.$element.val(this.updater(e)).change(),this.hide()},updater:function(e){return e},show:function(){var t=e.extend({},this.$element.position(),{height:this.$element[0].offsetHeight});return this.$menu.insertAfter(this.$element).css({top:t.top+t.height,left:t.left}).show(),this.shown=!0,this},hide:function(){return this.$menu.hide(),this.shown=!1,this},lookup:function(t){var n;return this.query=this.$element.val(),!this.query||this.query.length<this.options.minLength?this.shown?this.hide():this:(n=e.isFunction(this.source)?this.source(this.query,e.proxy(this.process,this)):this.source,n?this.process(n):this)},process:function(t){var n=this;return t=e.grep(t,function(e){return n.matcher(e)}),t=this.sorter(t),t.length?this.render(t.slice(0,this.options.items)).show():this.shown?this.hide():this},matcher:function(e){return~e.toLowerCase().indexOf(this.query.toLowerCase())},sorter:function(e){var t=[],n=[],r=[],i;while(i=e.shift())i.toLowerCase().indexOf(this.query.toLowerCase())?~i.indexOf(this.query)?n.push(i):r.push(i):t.push(i);return t.concat(n,r)},highlighter:function(e){var t=this.query.replace(/[\-\[\]{}()*+?.,\\\^$|#\s]/g,"\\$&");return e.replace(new RegExp("("+t+")","ig"),function(e,t){return"<strong>"+t+"</strong>"})},render:function(t){var n=this;return t=e(t).map(function(t,r){return t=e(n.options.item).attr("data-value",r),t.find("a").html(n.highlighter(r)),t[0]}),t.first().addClass("active"),this.$menu.html(t),this},next:function(t){var n=this.$menu.find(".active").removeClass("active"),r=n.next();r.length||(r=e(this.$menu.find("li")[0])),r.addClass("active")},prev:function(e){var t=this.$menu.find(".active").removeClass("active"),n=t.prev();n.length||(n=this.$menu.find("li").last()),n.addClass("active")},listen:function(){this.$element.on("focus",e.proxy(this.focus,this)).on("blur",e.proxy(this.blur,this)).on("keypress",e.proxy(this.keypress,this)).on("keyup",e.proxy(this.keyup,this)),this.eventSupported("keydown")&&this.$element.on("keydown",e.proxy(this.keydown,this)),this.$menu.on("click",e.proxy(this.click,this)).on("mouseenter","li",e.proxy(this.mouseenter,this)).on("mouseleave","li",e.proxy(this.mouseleave,this))},eventSupported:function(e){var t=e in this.$element;return t||(this.$element.setAttribute(e,"return;"),t=typeof this.$element[e]=="function"),t},move:function(e){if(!this.shown)return;switch(e.keyCode){case 9:case 13:case 27:e.preventDefault();break;case 38:e.preventDefault(),this.prev();break;case 40:e.preventDefault(),this.next()}e.stopPropagation()},keydown:function(t){this.suppressKeyPressRepeat=~e.inArray(t.keyCode,[40,38,9,13,27]),this.move(t)},keypress:function(e){if(this.suppressKeyPressRepeat)return;this.move(e)},keyup:function(e){switch(e.keyCode){case 40:case 38:case 16:case 17:case 18:break;case 9:case 13:if(!this.shown)return;this.select();break;case 27:if(!this.shown)return;this.hide();break;default:this.lookup()}e.stopPropagation(),e.preventDefault()},focus:function(e){this.focused=!0},blur:function(e){this.focused=!1,!this.mousedover&&this.shown&&this.hide()},click:function(e){e.stopPropagation(),e.preventDefault(),this.select(),this.$element.focus()},mouseenter:function(t){this.mousedover=!0,this.$menu.find(".active").removeClass("active"),e(t.currentTarget).addClass("active")},mouseleave:function(e){this.mousedover=!1,!this.focused&&this.shown&&this.hide()}};var n=e.fn.typeahead;e.fn.typeahead=function(n){return this.each(function(){var r=e(this),i=r.data("typeahead"),s=typeof n=="object"&&n;i||r.data("typeahead",i=new t(this,s)),typeof n=="string"&&i[n]()})},e.fn.typeahead.defaults={source:[],items:8,menu:'<ul class="typeahead dropdown-menu"></ul>',item:'<li><a href="#"></a></li>',minLength:1},e.fn.typeahead.Constructor=t,e.fn.typeahead.noConflict=function(){return e.fn.typeahead=n,this},e(document).on("focus.typeahead.data-api",'[data-provide="typeahead"]',function(t){var n=e(this);if(n.data("typeahead"))return;n.typeahead(n.data())})}(window.jQuery),!function(e){var t=function(t,n){this.options=e.extend({},e.fn.affix.defaults,n),this.$window=e(window).on("scroll.affix.data-api",e.proxy(this.checkPosition,this)).on("click.affix.data-api",e.proxy(function(){setTimeout(e.proxy(this.checkPosition,this),1)},this)),this.$element=e(t),this.checkPosition()};t.prototype.checkPosition=function(){if(!this.$element.is(":visible"))return;var t=e(document).height(),n=this.$window.scrollTop(),r=this.$element.offset(),i=this.options.offset,s=i.bottom,o=i.top,u="affix affix-top affix-bottom",a;typeof i!="object"&&(s=o=i),typeof o=="function"&&(o=i.top()),typeof s=="function"&&(s=i.bottom()),a=this.unpin!=null&&n+this.unpin<=r.top?!1:s!=null&&r.top+this.$element.height()>=t-s?"bottom":o!=null&&n<=o?"top":!1;if(this.affixed===a)return;this.affixed=a,this.unpin=a=="bottom"?r.top-n:null,this.$element.removeClass(u).addClass("affix"+(a?"-"+a:""))};var n=e.fn.affix;e.fn.affix=function(n){return this.each(function(){var r=e(this),i=r.data("affix"),s=typeof n=="object"&&n;i||r.data("affix",i=new t(this,s)),typeof n=="string"&&i[n]()})},e.fn.affix.Constructor=t,e.fn.affix.defaults={offset:0},e.fn.affix.noConflict=function(){return e.fn.affix=n,this},e(window).on("load",function(){e('[data-spy="affix"]').each(function(){var t=e(this),n=t.data();n.offset=n.offset||{},n.offsetBottom&&(n.offset.bottom=n.offsetBottom),n.offsetTop&&(n.offset.top=n.offsetTop),t.affix(n)})})}(window.jQuery);
 define("twitter.bootstrap", ["jquery"], function(){});
 
-/*
-
-Copyright (C) 2011 by Yehuda Katz
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-
-*/
-
-// lib/handlebars/browser-prefix.js
-var Handlebars = {};
-
-(function(Handlebars, undefined) {
-;
-// lib/handlebars/base.js
-
-Handlebars.VERSION = "1.0.0";
-Handlebars.COMPILER_REVISION = 4;
-
-Handlebars.REVISION_CHANGES = {
-  1: '<= 1.0.rc.2', // 1.0.rc.2 is actually rev2 but doesn't report it
-  2: '== 1.0.0-rc.3',
-  3: '== 1.0.0-rc.4',
-  4: '>= 1.0.0'
-};
-
-Handlebars.helpers  = {};
-Handlebars.partials = {};
-
-var toString = Object.prototype.toString,
-    functionType = '[object Function]',
-    objectType = '[object Object]';
-
-Handlebars.registerHelper = function(name, fn, inverse) {
-  if (toString.call(name) === objectType) {
-    if (inverse || fn) { throw new Handlebars.Exception('Arg not supported with multiple helpers'); }
-    Handlebars.Utils.extend(this.helpers, name);
-  } else {
-    if (inverse) { fn.not = inverse; }
-    this.helpers[name] = fn;
-  }
-};
-
-Handlebars.registerPartial = function(name, str) {
-  if (toString.call(name) === objectType) {
-    Handlebars.Utils.extend(this.partials,  name);
-  } else {
-    this.partials[name] = str;
-  }
-};
-
-Handlebars.registerHelper('helperMissing', function(arg) {
-  if(arguments.length === 2) {
-    return undefined;
-  } else {
-    throw new Error("Missing helper: '" + arg + "'");
-  }
-});
-
-Handlebars.registerHelper('blockHelperMissing', function(context, options) {
-  var inverse = options.inverse || function() {}, fn = options.fn;
-
-  var type = toString.call(context);
-
-  if(type === functionType) { context = context.call(this); }
-
-  if(context === true) {
-    return fn(this);
-  } else if(context === false || context == null) {
-    return inverse(this);
-  } else if(type === "[object Array]") {
-    if(context.length > 0) {
-      return Handlebars.helpers.each(context, options);
-    } else {
-      return inverse(this);
-    }
-  } else {
-    return fn(context);
-  }
-});
-
-Handlebars.K = function() {};
-
-Handlebars.createFrame = Object.create || function(object) {
-  Handlebars.K.prototype = object;
-  var obj = new Handlebars.K();
-  Handlebars.K.prototype = null;
-  return obj;
-};
-
-Handlebars.logger = {
-  DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, level: 3,
-
-  methodMap: {0: 'debug', 1: 'info', 2: 'warn', 3: 'error'},
-
-  // can be overridden in the host environment
-  log: function(level, obj) {
-    if (Handlebars.logger.level <= level) {
-      var method = Handlebars.logger.methodMap[level];
-      if (typeof console !== 'undefined' && console[method]) {
-        console[method].call(console, obj);
-      }
-    }
-  }
-};
-
-Handlebars.log = function(level, obj) { Handlebars.logger.log(level, obj); };
-
-Handlebars.registerHelper('each', function(context, options) {
-  var fn = options.fn, inverse = options.inverse;
-  var i = 0, ret = "", data;
-
-  var type = toString.call(context);
-  if(type === functionType) { context = context.call(this); }
-
-  if (options.data) {
-    data = Handlebars.createFrame(options.data);
-  }
-
-  if(context && typeof context === 'object') {
-    if(context instanceof Array){
-      for(var j = context.length; i<j; i++) {
-        if (data) { data.index = i; }
-        ret = ret + fn(context[i], { data: data });
-      }
-    } else {
-      for(var key in context) {
-        if(context.hasOwnProperty(key)) {
-          if(data) { data.key = key; }
-          ret = ret + fn(context[key], {data: data});
-          i++;
-        }
-      }
-    }
-  }
-
-  if(i === 0){
-    ret = inverse(this);
-  }
-
-  return ret;
-});
-
-Handlebars.registerHelper('if', function(conditional, options) {
-  var type = toString.call(conditional);
-  if(type === functionType) { conditional = conditional.call(this); }
-
-  if(!conditional || Handlebars.Utils.isEmpty(conditional)) {
-    return options.inverse(this);
-  } else {
-    return options.fn(this);
-  }
-});
-
-Handlebars.registerHelper('unless', function(conditional, options) {
-  return Handlebars.helpers['if'].call(this, conditional, {fn: options.inverse, inverse: options.fn});
-});
-
-Handlebars.registerHelper('with', function(context, options) {
-  var type = toString.call(context);
-  if(type === functionType) { context = context.call(this); }
-
-  if (!Handlebars.Utils.isEmpty(context)) return options.fn(context);
-});
-
-Handlebars.registerHelper('log', function(context, options) {
-  var level = options.data && options.data.level != null ? parseInt(options.data.level, 10) : 1;
-  Handlebars.log(level, context);
-});
-;
-// lib/handlebars/compiler/parser.js
-/* Jison generated parser */
-var handlebars = (function(){
-var parser = {trace: function trace() { },
-yy: {},
-symbols_: {"error":2,"root":3,"program":4,"EOF":5,"simpleInverse":6,"statements":7,"statement":8,"openInverse":9,"closeBlock":10,"openBlock":11,"mustache":12,"partial":13,"CONTENT":14,"COMMENT":15,"OPEN_BLOCK":16,"inMustache":17,"CLOSE":18,"OPEN_INVERSE":19,"OPEN_ENDBLOCK":20,"path":21,"OPEN":22,"OPEN_UNESCAPED":23,"CLOSE_UNESCAPED":24,"OPEN_PARTIAL":25,"partialName":26,"params":27,"hash":28,"dataName":29,"param":30,"STRING":31,"INTEGER":32,"BOOLEAN":33,"hashSegments":34,"hashSegment":35,"ID":36,"EQUALS":37,"DATA":38,"pathSegments":39,"SEP":40,"$accept":0,"$end":1},
-terminals_: {2:"error",5:"EOF",14:"CONTENT",15:"COMMENT",16:"OPEN_BLOCK",18:"CLOSE",19:"OPEN_INVERSE",20:"OPEN_ENDBLOCK",22:"OPEN",23:"OPEN_UNESCAPED",24:"CLOSE_UNESCAPED",25:"OPEN_PARTIAL",31:"STRING",32:"INTEGER",33:"BOOLEAN",36:"ID",37:"EQUALS",38:"DATA",40:"SEP"},
-productions_: [0,[3,2],[4,2],[4,3],[4,2],[4,1],[4,1],[4,0],[7,1],[7,2],[8,3],[8,3],[8,1],[8,1],[8,1],[8,1],[11,3],[9,3],[10,3],[12,3],[12,3],[13,3],[13,4],[6,2],[17,3],[17,2],[17,2],[17,1],[17,1],[27,2],[27,1],[30,1],[30,1],[30,1],[30,1],[30,1],[28,1],[34,2],[34,1],[35,3],[35,3],[35,3],[35,3],[35,3],[26,1],[26,1],[26,1],[29,2],[21,1],[39,3],[39,1]],
-performAction: function anonymous(yytext,yyleng,yylineno,yy,yystate,$$,_$) {
-
-var $0 = $$.length - 1;
-switch (yystate) {
-case 1: return $$[$0-1]; 
-break;
-case 2: this.$ = new yy.ProgramNode([], $$[$0]); 
-break;
-case 3: this.$ = new yy.ProgramNode($$[$0-2], $$[$0]); 
-break;
-case 4: this.$ = new yy.ProgramNode($$[$0-1], []); 
-break;
-case 5: this.$ = new yy.ProgramNode($$[$0]); 
-break;
-case 6: this.$ = new yy.ProgramNode([], []); 
-break;
-case 7: this.$ = new yy.ProgramNode([]); 
-break;
-case 8: this.$ = [$$[$0]]; 
-break;
-case 9: $$[$0-1].push($$[$0]); this.$ = $$[$0-1]; 
-break;
-case 10: this.$ = new yy.BlockNode($$[$0-2], $$[$0-1].inverse, $$[$0-1], $$[$0]); 
-break;
-case 11: this.$ = new yy.BlockNode($$[$0-2], $$[$0-1], $$[$0-1].inverse, $$[$0]); 
-break;
-case 12: this.$ = $$[$0]; 
-break;
-case 13: this.$ = $$[$0]; 
-break;
-case 14: this.$ = new yy.ContentNode($$[$0]); 
-break;
-case 15: this.$ = new yy.CommentNode($$[$0]); 
-break;
-case 16: this.$ = new yy.MustacheNode($$[$0-1][0], $$[$0-1][1]); 
-break;
-case 17: this.$ = new yy.MustacheNode($$[$0-1][0], $$[$0-1][1]); 
-break;
-case 18: this.$ = $$[$0-1]; 
-break;
-case 19:
-    // Parsing out the '&' escape token at this level saves ~500 bytes after min due to the removal of one parser node.
-    this.$ = new yy.MustacheNode($$[$0-1][0], $$[$0-1][1], $$[$0-2][2] === '&');
-  
-break;
-case 20: this.$ = new yy.MustacheNode($$[$0-1][0], $$[$0-1][1], true); 
-break;
-case 21: this.$ = new yy.PartialNode($$[$0-1]); 
-break;
-case 22: this.$ = new yy.PartialNode($$[$0-2], $$[$0-1]); 
-break;
-case 23: 
-break;
-case 24: this.$ = [[$$[$0-2]].concat($$[$0-1]), $$[$0]]; 
-break;
-case 25: this.$ = [[$$[$0-1]].concat($$[$0]), null]; 
-break;
-case 26: this.$ = [[$$[$0-1]], $$[$0]]; 
-break;
-case 27: this.$ = [[$$[$0]], null]; 
-break;
-case 28: this.$ = [[$$[$0]], null]; 
-break;
-case 29: $$[$0-1].push($$[$0]); this.$ = $$[$0-1]; 
-break;
-case 30: this.$ = [$$[$0]]; 
-break;
-case 31: this.$ = $$[$0]; 
-break;
-case 32: this.$ = new yy.StringNode($$[$0]); 
-break;
-case 33: this.$ = new yy.IntegerNode($$[$0]); 
-break;
-case 34: this.$ = new yy.BooleanNode($$[$0]); 
-break;
-case 35: this.$ = $$[$0]; 
-break;
-case 36: this.$ = new yy.HashNode($$[$0]); 
-break;
-case 37: $$[$0-1].push($$[$0]); this.$ = $$[$0-1]; 
-break;
-case 38: this.$ = [$$[$0]]; 
-break;
-case 39: this.$ = [$$[$0-2], $$[$0]]; 
-break;
-case 40: this.$ = [$$[$0-2], new yy.StringNode($$[$0])]; 
-break;
-case 41: this.$ = [$$[$0-2], new yy.IntegerNode($$[$0])]; 
-break;
-case 42: this.$ = [$$[$0-2], new yy.BooleanNode($$[$0])]; 
-break;
-case 43: this.$ = [$$[$0-2], $$[$0]]; 
-break;
-case 44: this.$ = new yy.PartialNameNode($$[$0]); 
-break;
-case 45: this.$ = new yy.PartialNameNode(new yy.StringNode($$[$0])); 
-break;
-case 46: this.$ = new yy.PartialNameNode(new yy.IntegerNode($$[$0])); 
-break;
-case 47: this.$ = new yy.DataNode($$[$0]); 
-break;
-case 48: this.$ = new yy.IdNode($$[$0]); 
-break;
-case 49: $$[$0-2].push({part: $$[$0], separator: $$[$0-1]}); this.$ = $$[$0-2]; 
-break;
-case 50: this.$ = [{part: $$[$0]}]; 
-break;
-}
-},
-table: [{3:1,4:2,5:[2,7],6:3,7:4,8:6,9:7,11:8,12:9,13:10,14:[1,11],15:[1,12],16:[1,13],19:[1,5],22:[1,14],23:[1,15],25:[1,16]},{1:[3]},{5:[1,17]},{5:[2,6],7:18,8:6,9:7,11:8,12:9,13:10,14:[1,11],15:[1,12],16:[1,13],19:[1,19],20:[2,6],22:[1,14],23:[1,15],25:[1,16]},{5:[2,5],6:20,8:21,9:7,11:8,12:9,13:10,14:[1,11],15:[1,12],16:[1,13],19:[1,5],20:[2,5],22:[1,14],23:[1,15],25:[1,16]},{17:23,18:[1,22],21:24,29:25,36:[1,28],38:[1,27],39:26},{5:[2,8],14:[2,8],15:[2,8],16:[2,8],19:[2,8],20:[2,8],22:[2,8],23:[2,8],25:[2,8]},{4:29,6:3,7:4,8:6,9:7,11:8,12:9,13:10,14:[1,11],15:[1,12],16:[1,13],19:[1,5],20:[2,7],22:[1,14],23:[1,15],25:[1,16]},{4:30,6:3,7:4,8:6,9:7,11:8,12:9,13:10,14:[1,11],15:[1,12],16:[1,13],19:[1,5],20:[2,7],22:[1,14],23:[1,15],25:[1,16]},{5:[2,12],14:[2,12],15:[2,12],16:[2,12],19:[2,12],20:[2,12],22:[2,12],23:[2,12],25:[2,12]},{5:[2,13],14:[2,13],15:[2,13],16:[2,13],19:[2,13],20:[2,13],22:[2,13],23:[2,13],25:[2,13]},{5:[2,14],14:[2,14],15:[2,14],16:[2,14],19:[2,14],20:[2,14],22:[2,14],23:[2,14],25:[2,14]},{5:[2,15],14:[2,15],15:[2,15],16:[2,15],19:[2,15],20:[2,15],22:[2,15],23:[2,15],25:[2,15]},{17:31,21:24,29:25,36:[1,28],38:[1,27],39:26},{17:32,21:24,29:25,36:[1,28],38:[1,27],39:26},{17:33,21:24,29:25,36:[1,28],38:[1,27],39:26},{21:35,26:34,31:[1,36],32:[1,37],36:[1,28],39:26},{1:[2,1]},{5:[2,2],8:21,9:7,11:8,12:9,13:10,14:[1,11],15:[1,12],16:[1,13],19:[1,19],20:[2,2],22:[1,14],23:[1,15],25:[1,16]},{17:23,21:24,29:25,36:[1,28],38:[1,27],39:26},{5:[2,4],7:38,8:6,9:7,11:8,12:9,13:10,14:[1,11],15:[1,12],16:[1,13],19:[1,19],20:[2,4],22:[1,14],23:[1,15],25:[1,16]},{5:[2,9],14:[2,9],15:[2,9],16:[2,9],19:[2,9],20:[2,9],22:[2,9],23:[2,9],25:[2,9]},{5:[2,23],14:[2,23],15:[2,23],16:[2,23],19:[2,23],20:[2,23],22:[2,23],23:[2,23],25:[2,23]},{18:[1,39]},{18:[2,27],21:44,24:[2,27],27:40,28:41,29:48,30:42,31:[1,45],32:[1,46],33:[1,47],34:43,35:49,36:[1,50],38:[1,27],39:26},{18:[2,28],24:[2,28]},{18:[2,48],24:[2,48],31:[2,48],32:[2,48],33:[2,48],36:[2,48],38:[2,48],40:[1,51]},{21:52,36:[1,28],39:26},{18:[2,50],24:[2,50],31:[2,50],32:[2,50],33:[2,50],36:[2,50],38:[2,50],40:[2,50]},{10:53,20:[1,54]},{10:55,20:[1,54]},{18:[1,56]},{18:[1,57]},{24:[1,58]},{18:[1,59],21:60,36:[1,28],39:26},{18:[2,44],36:[2,44]},{18:[2,45],36:[2,45]},{18:[2,46],36:[2,46]},{5:[2,3],8:21,9:7,11:8,12:9,13:10,14:[1,11],15:[1,12],16:[1,13],19:[1,19],20:[2,3],22:[1,14],23:[1,15],25:[1,16]},{14:[2,17],15:[2,17],16:[2,17],19:[2,17],20:[2,17],22:[2,17],23:[2,17],25:[2,17]},{18:[2,25],21:44,24:[2,25],28:61,29:48,30:62,31:[1,45],32:[1,46],33:[1,47],34:43,35:49,36:[1,50],38:[1,27],39:26},{18:[2,26],24:[2,26]},{18:[2,30],24:[2,30],31:[2,30],32:[2,30],33:[2,30],36:[2,30],38:[2,30]},{18:[2,36],24:[2,36],35:63,36:[1,64]},{18:[2,31],24:[2,31],31:[2,31],32:[2,31],33:[2,31],36:[2,31],38:[2,31]},{18:[2,32],24:[2,32],31:[2,32],32:[2,32],33:[2,32],36:[2,32],38:[2,32]},{18:[2,33],24:[2,33],31:[2,33],32:[2,33],33:[2,33],36:[2,33],38:[2,33]},{18:[2,34],24:[2,34],31:[2,34],32:[2,34],33:[2,34],36:[2,34],38:[2,34]},{18:[2,35],24:[2,35],31:[2,35],32:[2,35],33:[2,35],36:[2,35],38:[2,35]},{18:[2,38],24:[2,38],36:[2,38]},{18:[2,50],24:[2,50],31:[2,50],32:[2,50],33:[2,50],36:[2,50],37:[1,65],38:[2,50],40:[2,50]},{36:[1,66]},{18:[2,47],24:[2,47],31:[2,47],32:[2,47],33:[2,47],36:[2,47],38:[2,47]},{5:[2,10],14:[2,10],15:[2,10],16:[2,10],19:[2,10],20:[2,10],22:[2,10],23:[2,10],25:[2,10]},{21:67,36:[1,28],39:26},{5:[2,11],14:[2,11],15:[2,11],16:[2,11],19:[2,11],20:[2,11],22:[2,11],23:[2,11],25:[2,11]},{14:[2,16],15:[2,16],16:[2,16],19:[2,16],20:[2,16],22:[2,16],23:[2,16],25:[2,16]},{5:[2,19],14:[2,19],15:[2,19],16:[2,19],19:[2,19],20:[2,19],22:[2,19],23:[2,19],25:[2,19]},{5:[2,20],14:[2,20],15:[2,20],16:[2,20],19:[2,20],20:[2,20],22:[2,20],23:[2,20],25:[2,20]},{5:[2,21],14:[2,21],15:[2,21],16:[2,21],19:[2,21],20:[2,21],22:[2,21],23:[2,21],25:[2,21]},{18:[1,68]},{18:[2,24],24:[2,24]},{18:[2,29],24:[2,29],31:[2,29],32:[2,29],33:[2,29],36:[2,29],38:[2,29]},{18:[2,37],24:[2,37],36:[2,37]},{37:[1,65]},{21:69,29:73,31:[1,70],32:[1,71],33:[1,72],36:[1,28],38:[1,27],39:26},{18:[2,49],24:[2,49],31:[2,49],32:[2,49],33:[2,49],36:[2,49],38:[2,49],40:[2,49]},{18:[1,74]},{5:[2,22],14:[2,22],15:[2,22],16:[2,22],19:[2,22],20:[2,22],22:[2,22],23:[2,22],25:[2,22]},{18:[2,39],24:[2,39],36:[2,39]},{18:[2,40],24:[2,40],36:[2,40]},{18:[2,41],24:[2,41],36:[2,41]},{18:[2,42],24:[2,42],36:[2,42]},{18:[2,43],24:[2,43],36:[2,43]},{5:[2,18],14:[2,18],15:[2,18],16:[2,18],19:[2,18],20:[2,18],22:[2,18],23:[2,18],25:[2,18]}],
-defaultActions: {17:[2,1]},
-parseError: function parseError(str, hash) {
-    throw new Error(str);
-},
-parse: function parse(input) {
-    var self = this, stack = [0], vstack = [null], lstack = [], table = this.table, yytext = "", yylineno = 0, yyleng = 0, recovering = 0, TERROR = 2, EOF = 1;
-    this.lexer.setInput(input);
-    this.lexer.yy = this.yy;
-    this.yy.lexer = this.lexer;
-    this.yy.parser = this;
-    if (typeof this.lexer.yylloc == "undefined")
-        this.lexer.yylloc = {};
-    var yyloc = this.lexer.yylloc;
-    lstack.push(yyloc);
-    var ranges = this.lexer.options && this.lexer.options.ranges;
-    if (typeof this.yy.parseError === "function")
-        this.parseError = this.yy.parseError;
-    function popStack(n) {
-        stack.length = stack.length - 2 * n;
-        vstack.length = vstack.length - n;
-        lstack.length = lstack.length - n;
-    }
-    function lex() {
-        var token;
-        token = self.lexer.lex() || 1;
-        if (typeof token !== "number") {
-            token = self.symbols_[token] || token;
-        }
-        return token;
-    }
-    var symbol, preErrorSymbol, state, action, a, r, yyval = {}, p, len, newState, expected;
-    while (true) {
-        state = stack[stack.length - 1];
-        if (this.defaultActions[state]) {
-            action = this.defaultActions[state];
-        } else {
-            if (symbol === null || typeof symbol == "undefined") {
-                symbol = lex();
-            }
-            action = table[state] && table[state][symbol];
-        }
-        if (typeof action === "undefined" || !action.length || !action[0]) {
-            var errStr = "";
-            if (!recovering) {
-                expected = [];
-                for (p in table[state])
-                    if (this.terminals_[p] && p > 2) {
-                        expected.push("'" + this.terminals_[p] + "'");
-                    }
-                if (this.lexer.showPosition) {
-                    errStr = "Parse error on line " + (yylineno + 1) + ":\n" + this.lexer.showPosition() + "\nExpecting " + expected.join(", ") + ", got '" + (this.terminals_[symbol] || symbol) + "'";
-                } else {
-                    errStr = "Parse error on line " + (yylineno + 1) + ": Unexpected " + (symbol == 1?"end of input":"'" + (this.terminals_[symbol] || symbol) + "'");
-                }
-                this.parseError(errStr, {text: this.lexer.match, token: this.terminals_[symbol] || symbol, line: this.lexer.yylineno, loc: yyloc, expected: expected});
-            }
-        }
-        if (action[0] instanceof Array && action.length > 1) {
-            throw new Error("Parse Error: multiple actions possible at state: " + state + ", token: " + symbol);
-        }
-        switch (action[0]) {
-        case 1:
-            stack.push(symbol);
-            vstack.push(this.lexer.yytext);
-            lstack.push(this.lexer.yylloc);
-            stack.push(action[1]);
-            symbol = null;
-            if (!preErrorSymbol) {
-                yyleng = this.lexer.yyleng;
-                yytext = this.lexer.yytext;
-                yylineno = this.lexer.yylineno;
-                yyloc = this.lexer.yylloc;
-                if (recovering > 0)
-                    recovering--;
-            } else {
-                symbol = preErrorSymbol;
-                preErrorSymbol = null;
-            }
-            break;
-        case 2:
-            len = this.productions_[action[1]][1];
-            yyval.$ = vstack[vstack.length - len];
-            yyval._$ = {first_line: lstack[lstack.length - (len || 1)].first_line, last_line: lstack[lstack.length - 1].last_line, first_column: lstack[lstack.length - (len || 1)].first_column, last_column: lstack[lstack.length - 1].last_column};
-            if (ranges) {
-                yyval._$.range = [lstack[lstack.length - (len || 1)].range[0], lstack[lstack.length - 1].range[1]];
-            }
-            r = this.performAction.call(yyval, yytext, yyleng, yylineno, this.yy, action[1], vstack, lstack);
-            if (typeof r !== "undefined") {
-                return r;
-            }
-            if (len) {
-                stack = stack.slice(0, -1 * len * 2);
-                vstack = vstack.slice(0, -1 * len);
-                lstack = lstack.slice(0, -1 * len);
-            }
-            stack.push(this.productions_[action[1]][0]);
-            vstack.push(yyval.$);
-            lstack.push(yyval._$);
-            newState = table[stack[stack.length - 2]][stack[stack.length - 1]];
-            stack.push(newState);
-            break;
-        case 3:
-            return true;
-        }
-    }
-    return true;
-}
-};
-/* Jison generated lexer */
-var lexer = (function(){
-var lexer = ({EOF:1,
-parseError:function parseError(str, hash) {
-        if (this.yy.parser) {
-            this.yy.parser.parseError(str, hash);
-        } else {
-            throw new Error(str);
-        }
-    },
-setInput:function (input) {
-        this._input = input;
-        this._more = this._less = this.done = false;
-        this.yylineno = this.yyleng = 0;
-        this.yytext = this.matched = this.match = '';
-        this.conditionStack = ['INITIAL'];
-        this.yylloc = {first_line:1,first_column:0,last_line:1,last_column:0};
-        if (this.options.ranges) this.yylloc.range = [0,0];
-        this.offset = 0;
-        return this;
-    },
-input:function () {
-        var ch = this._input[0];
-        this.yytext += ch;
-        this.yyleng++;
-        this.offset++;
-        this.match += ch;
-        this.matched += ch;
-        var lines = ch.match(/(?:\r\n?|\n).*/g);
-        if (lines) {
-            this.yylineno++;
-            this.yylloc.last_line++;
-        } else {
-            this.yylloc.last_column++;
-        }
-        if (this.options.ranges) this.yylloc.range[1]++;
-
-        this._input = this._input.slice(1);
-        return ch;
-    },
-unput:function (ch) {
-        var len = ch.length;
-        var lines = ch.split(/(?:\r\n?|\n)/g);
-
-        this._input = ch + this._input;
-        this.yytext = this.yytext.substr(0, this.yytext.length-len-1);
-        //this.yyleng -= len;
-        this.offset -= len;
-        var oldLines = this.match.split(/(?:\r\n?|\n)/g);
-        this.match = this.match.substr(0, this.match.length-1);
-        this.matched = this.matched.substr(0, this.matched.length-1);
-
-        if (lines.length-1) this.yylineno -= lines.length-1;
-        var r = this.yylloc.range;
-
-        this.yylloc = {first_line: this.yylloc.first_line,
-          last_line: this.yylineno+1,
-          first_column: this.yylloc.first_column,
-          last_column: lines ?
-              (lines.length === oldLines.length ? this.yylloc.first_column : 0) + oldLines[oldLines.length - lines.length].length - lines[0].length:
-              this.yylloc.first_column - len
-          };
-
-        if (this.options.ranges) {
-            this.yylloc.range = [r[0], r[0] + this.yyleng - len];
-        }
-        return this;
-    },
-more:function () {
-        this._more = true;
-        return this;
-    },
-less:function (n) {
-        this.unput(this.match.slice(n));
-    },
-pastInput:function () {
-        var past = this.matched.substr(0, this.matched.length - this.match.length);
-        return (past.length > 20 ? '...':'') + past.substr(-20).replace(/\n/g, "");
-    },
-upcomingInput:function () {
-        var next = this.match;
-        if (next.length < 20) {
-            next += this._input.substr(0, 20-next.length);
-        }
-        return (next.substr(0,20)+(next.length > 20 ? '...':'')).replace(/\n/g, "");
-    },
-showPosition:function () {
-        var pre = this.pastInput();
-        var c = new Array(pre.length + 1).join("-");
-        return pre + this.upcomingInput() + "\n" + c+"^";
-    },
-next:function () {
-        if (this.done) {
-            return this.EOF;
-        }
-        if (!this._input) this.done = true;
-
-        var token,
-            match,
-            tempMatch,
-            index,
-            col,
-            lines;
-        if (!this._more) {
-            this.yytext = '';
-            this.match = '';
-        }
-        var rules = this._currentRules();
-        for (var i=0;i < rules.length; i++) {
-            tempMatch = this._input.match(this.rules[rules[i]]);
-            if (tempMatch && (!match || tempMatch[0].length > match[0].length)) {
-                match = tempMatch;
-                index = i;
-                if (!this.options.flex) break;
-            }
-        }
-        if (match) {
-            lines = match[0].match(/(?:\r\n?|\n).*/g);
-            if (lines) this.yylineno += lines.length;
-            this.yylloc = {first_line: this.yylloc.last_line,
-                           last_line: this.yylineno+1,
-                           first_column: this.yylloc.last_column,
-                           last_column: lines ? lines[lines.length-1].length-lines[lines.length-1].match(/\r?\n?/)[0].length : this.yylloc.last_column + match[0].length};
-            this.yytext += match[0];
-            this.match += match[0];
-            this.matches = match;
-            this.yyleng = this.yytext.length;
-            if (this.options.ranges) {
-                this.yylloc.range = [this.offset, this.offset += this.yyleng];
-            }
-            this._more = false;
-            this._input = this._input.slice(match[0].length);
-            this.matched += match[0];
-            token = this.performAction.call(this, this.yy, this, rules[index],this.conditionStack[this.conditionStack.length-1]);
-            if (this.done && this._input) this.done = false;
-            if (token) return token;
-            else return;
-        }
-        if (this._input === "") {
-            return this.EOF;
-        } else {
-            return this.parseError('Lexical error on line '+(this.yylineno+1)+'. Unrecognized text.\n'+this.showPosition(),
-                    {text: "", token: null, line: this.yylineno});
-        }
-    },
-lex:function lex() {
-        var r = this.next();
-        if (typeof r !== 'undefined') {
-            return r;
-        } else {
-            return this.lex();
-        }
-    },
-begin:function begin(condition) {
-        this.conditionStack.push(condition);
-    },
-popState:function popState() {
-        return this.conditionStack.pop();
-    },
-_currentRules:function _currentRules() {
-        return this.conditions[this.conditionStack[this.conditionStack.length-1]].rules;
-    },
-topState:function () {
-        return this.conditionStack[this.conditionStack.length-2];
-    },
-pushState:function begin(condition) {
-        this.begin(condition);
-    }});
-lexer.options = {};
-lexer.performAction = function anonymous(yy,yy_,$avoiding_name_collisions,YY_START) {
-
-var YYSTATE=YY_START
-switch($avoiding_name_collisions) {
-case 0: yy_.yytext = "\\"; return 14; 
-break;
-case 1:
-                                   if(yy_.yytext.slice(-1) !== "\\") this.begin("mu");
-                                   if(yy_.yytext.slice(-1) === "\\") yy_.yytext = yy_.yytext.substr(0,yy_.yyleng-1), this.begin("emu");
-                                   if(yy_.yytext) return 14;
-                                 
-break;
-case 2: return 14; 
-break;
-case 3:
-                                   if(yy_.yytext.slice(-1) !== "\\") this.popState();
-                                   if(yy_.yytext.slice(-1) === "\\") yy_.yytext = yy_.yytext.substr(0,yy_.yyleng-1);
-                                   return 14;
-                                 
-break;
-case 4: yy_.yytext = yy_.yytext.substr(0, yy_.yyleng-4); this.popState(); return 15; 
-break;
-case 5: return 25; 
-break;
-case 6: return 16; 
-break;
-case 7: return 20; 
-break;
-case 8: return 19; 
-break;
-case 9: return 19; 
-break;
-case 10: return 23; 
-break;
-case 11: return 22; 
-break;
-case 12: this.popState(); this.begin('com'); 
-break;
-case 13: yy_.yytext = yy_.yytext.substr(3,yy_.yyleng-5); this.popState(); return 15; 
-break;
-case 14: return 22; 
-break;
-case 15: return 37; 
-break;
-case 16: return 36; 
-break;
-case 17: return 36; 
-break;
-case 18: return 40; 
-break;
-case 19: /*ignore whitespace*/ 
-break;
-case 20: this.popState(); return 24; 
-break;
-case 21: this.popState(); return 18; 
-break;
-case 22: yy_.yytext = yy_.yytext.substr(1,yy_.yyleng-2).replace(/\\"/g,'"'); return 31; 
-break;
-case 23: yy_.yytext = yy_.yytext.substr(1,yy_.yyleng-2).replace(/\\'/g,"'"); return 31; 
-break;
-case 24: return 38; 
-break;
-case 25: return 33; 
-break;
-case 26: return 33; 
-break;
-case 27: return 32; 
-break;
-case 28: return 36; 
-break;
-case 29: yy_.yytext = yy_.yytext.substr(1, yy_.yyleng-2); return 36; 
-break;
-case 30: return 'INVALID'; 
-break;
-case 31: return 5; 
-break;
-}
-};
-lexer.rules = [/^(?:\\\\(?=(\{\{)))/,/^(?:[^\x00]*?(?=(\{\{)))/,/^(?:[^\x00]+)/,/^(?:[^\x00]{2,}?(?=(\{\{|$)))/,/^(?:[\s\S]*?--\}\})/,/^(?:\{\{>)/,/^(?:\{\{#)/,/^(?:\{\{\/)/,/^(?:\{\{\^)/,/^(?:\{\{\s*else\b)/,/^(?:\{\{\{)/,/^(?:\{\{&)/,/^(?:\{\{!--)/,/^(?:\{\{![\s\S]*?\}\})/,/^(?:\{\{)/,/^(?:=)/,/^(?:\.(?=[}\/ ]))/,/^(?:\.\.)/,/^(?:[\/.])/,/^(?:\s+)/,/^(?:\}\}\})/,/^(?:\}\})/,/^(?:"(\\["]|[^"])*")/,/^(?:'(\\[']|[^'])*')/,/^(?:@)/,/^(?:true(?=[}\s]))/,/^(?:false(?=[}\s]))/,/^(?:-?[0-9]+(?=[}\s]))/,/^(?:[^\s!"#%-,\.\/;->@\[-\^`\{-~]+(?=[=}\s\/.]))/,/^(?:\[[^\]]*\])/,/^(?:.)/,/^(?:$)/];
-lexer.conditions = {"mu":{"rules":[5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31],"inclusive":false},"emu":{"rules":[3],"inclusive":false},"com":{"rules":[4],"inclusive":false},"INITIAL":{"rules":[0,1,2,31],"inclusive":true}};
-return lexer;})()
-parser.lexer = lexer;
-function Parser () { this.yy = {}; }Parser.prototype = parser;parser.Parser = Parser;
-return new Parser;
-})();;
-// lib/handlebars/compiler/base.js
-
-Handlebars.Parser = handlebars;
-
-Handlebars.parse = function(input) {
-
-  // Just return if an already-compile AST was passed in.
-  if(input.constructor === Handlebars.AST.ProgramNode) { return input; }
-
-  Handlebars.Parser.yy = Handlebars.AST;
-  return Handlebars.Parser.parse(input);
-};
-;
-// lib/handlebars/compiler/ast.js
-Handlebars.AST = {};
-
-Handlebars.AST.ProgramNode = function(statements, inverse) {
-  this.type = "program";
-  this.statements = statements;
-  if(inverse) { this.inverse = new Handlebars.AST.ProgramNode(inverse); }
-};
-
-Handlebars.AST.MustacheNode = function(rawParams, hash, unescaped) {
-  this.type = "mustache";
-  this.escaped = !unescaped;
-  this.hash = hash;
-
-  var id = this.id = rawParams[0];
-  var params = this.params = rawParams.slice(1);
-
-  // a mustache is an eligible helper if:
-  // * its id is simple (a single part, not `this` or `..`)
-  var eligibleHelper = this.eligibleHelper = id.isSimple;
-
-  // a mustache is definitely a helper if:
-  // * it is an eligible helper, and
-  // * it has at least one parameter or hash segment
-  this.isHelper = eligibleHelper && (params.length || hash);
-
-  // if a mustache is an eligible helper but not a definite
-  // helper, it is ambiguous, and will be resolved in a later
-  // pass or at runtime.
-};
-
-Handlebars.AST.PartialNode = function(partialName, context) {
-  this.type         = "partial";
-  this.partialName  = partialName;
-  this.context      = context;
-};
-
-Handlebars.AST.BlockNode = function(mustache, program, inverse, close) {
-  var verifyMatch = function(open, close) {
-    if(open.original !== close.original) {
-      throw new Handlebars.Exception(open.original + " doesn't match " + close.original);
-    }
-  };
-
-  verifyMatch(mustache.id, close);
-  this.type = "block";
-  this.mustache = mustache;
-  this.program  = program;
-  this.inverse  = inverse;
-
-  if (this.inverse && !this.program) {
-    this.isInverse = true;
-  }
-};
-
-Handlebars.AST.ContentNode = function(string) {
-  this.type = "content";
-  this.string = string;
-};
-
-Handlebars.AST.HashNode = function(pairs) {
-  this.type = "hash";
-  this.pairs = pairs;
-};
-
-Handlebars.AST.IdNode = function(parts) {
-  this.type = "ID";
-
-  var original = "",
-      dig = [],
-      depth = 0;
-
-  for(var i=0,l=parts.length; i<l; i++) {
-    var part = parts[i].part;
-    original += (parts[i].separator || '') + part;
-
-    if (part === ".." || part === "." || part === "this") {
-      if (dig.length > 0) { throw new Handlebars.Exception("Invalid path: " + original); }
-      else if (part === "..") { depth++; }
-      else { this.isScoped = true; }
-    }
-    else { dig.push(part); }
-  }
-
-  this.original = original;
-  this.parts    = dig;
-  this.string   = dig.join('.');
-  this.depth    = depth;
-
-  // an ID is simple if it only has one part, and that part is not
-  // `..` or `this`.
-  this.isSimple = parts.length === 1 && !this.isScoped && depth === 0;
-
-  this.stringModeValue = this.string;
-};
-
-Handlebars.AST.PartialNameNode = function(name) {
-  this.type = "PARTIAL_NAME";
-  this.name = name.original;
-};
-
-Handlebars.AST.DataNode = function(id) {
-  this.type = "DATA";
-  this.id = id;
-};
-
-Handlebars.AST.StringNode = function(string) {
-  this.type = "STRING";
-  this.original =
-    this.string =
-    this.stringModeValue = string;
-};
-
-Handlebars.AST.IntegerNode = function(integer) {
-  this.type = "INTEGER";
-  this.original =
-    this.integer = integer;
-  this.stringModeValue = Number(integer);
-};
-
-Handlebars.AST.BooleanNode = function(bool) {
-  this.type = "BOOLEAN";
-  this.bool = bool;
-  this.stringModeValue = bool === "true";
-};
-
-Handlebars.AST.CommentNode = function(comment) {
-  this.type = "comment";
-  this.comment = comment;
-};
-;
-// lib/handlebars/utils.js
-
-var errorProps = ['description', 'fileName', 'lineNumber', 'message', 'name', 'number', 'stack'];
-
-Handlebars.Exception = function(message) {
-  var tmp = Error.prototype.constructor.apply(this, arguments);
-
-  // Unfortunately errors are not enumerable in Chrome (at least), so `for prop in tmp` doesn't work.
-  for (var idx = 0; idx < errorProps.length; idx++) {
-    this[errorProps[idx]] = tmp[errorProps[idx]];
-  }
-};
-Handlebars.Exception.prototype = new Error();
-
-// Build out our basic SafeString type
-Handlebars.SafeString = function(string) {
-  this.string = string;
-};
-Handlebars.SafeString.prototype.toString = function() {
-  return this.string.toString();
-};
-
-var escape = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#x27;",
-  "`": "&#x60;"
-};
-
-var badChars = /[&<>"'`]/g;
-var possible = /[&<>"'`]/;
-
-var escapeChar = function(chr) {
-  return escape[chr] || "&amp;";
-};
-
-Handlebars.Utils = {
-  extend: function(obj, value) {
-    for(var key in value) {
-      if(value.hasOwnProperty(key)) {
-        obj[key] = value[key];
-      }
-    }
-  },
-
-  escapeExpression: function(string) {
-    // don't escape SafeStrings, since they're already safe
-    if (string instanceof Handlebars.SafeString) {
-      return string.toString();
-    } else if (string == null || string === false) {
-      return "";
-    }
-
-    // Force a string conversion as this will be done by the append regardless and
-    // the regex test will do this transparently behind the scenes, causing issues if
-    // an object's to string has escaped characters in it.
-    string = string.toString();
-
-    if(!possible.test(string)) { return string; }
-    return string.replace(badChars, escapeChar);
-  },
-
-  isEmpty: function(value) {
-    if (!value && value !== 0) {
-      return true;
-    } else if(toString.call(value) === "[object Array]" && value.length === 0) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-};
-;
-// lib/handlebars/compiler/compiler.js
-
-/*jshint eqnull:true*/
-var Compiler = Handlebars.Compiler = function() {};
-var JavaScriptCompiler = Handlebars.JavaScriptCompiler = function() {};
-
-// the foundHelper register will disambiguate helper lookup from finding a
-// function in a context. This is necessary for mustache compatibility, which
-// requires that context functions in blocks are evaluated by blockHelperMissing,
-// and then proceed as if the resulting value was provided to blockHelperMissing.
-
-Compiler.prototype = {
-  compiler: Compiler,
-
-  disassemble: function() {
-    var opcodes = this.opcodes, opcode, out = [], params, param;
-
-    for (var i=0, l=opcodes.length; i<l; i++) {
-      opcode = opcodes[i];
-
-      if (opcode.opcode === 'DECLARE') {
-        out.push("DECLARE " + opcode.name + "=" + opcode.value);
-      } else {
-        params = [];
-        for (var j=0; j<opcode.args.length; j++) {
-          param = opcode.args[j];
-          if (typeof param === "string") {
-            param = "\"" + param.replace("\n", "\\n") + "\"";
-          }
-          params.push(param);
-        }
-        out.push(opcode.opcode + " " + params.join(" "));
-      }
-    }
-
-    return out.join("\n");
-  },
-  equals: function(other) {
-    var len = this.opcodes.length;
-    if (other.opcodes.length !== len) {
-      return false;
-    }
-
-    for (var i = 0; i < len; i++) {
-      var opcode = this.opcodes[i],
-          otherOpcode = other.opcodes[i];
-      if (opcode.opcode !== otherOpcode.opcode || opcode.args.length !== otherOpcode.args.length) {
-        return false;
-      }
-      for (var j = 0; j < opcode.args.length; j++) {
-        if (opcode.args[j] !== otherOpcode.args[j]) {
-          return false;
-        }
-      }
-    }
-
-    len = this.children.length;
-    if (other.children.length !== len) {
-      return false;
-    }
-    for (i = 0; i < len; i++) {
-      if (!this.children[i].equals(other.children[i])) {
-        return false;
-      }
-    }
-
-    return true;
-  },
-
-  guid: 0,
-
-  compile: function(program, options) {
-    this.children = [];
-    this.depths = {list: []};
-    this.options = options;
-
-    // These changes will propagate to the other compiler components
-    var knownHelpers = this.options.knownHelpers;
-    this.options.knownHelpers = {
-      'helperMissing': true,
-      'blockHelperMissing': true,
-      'each': true,
-      'if': true,
-      'unless': true,
-      'with': true,
-      'log': true
-    };
-    if (knownHelpers) {
-      for (var name in knownHelpers) {
-        this.options.knownHelpers[name] = knownHelpers[name];
-      }
-    }
-
-    return this.program(program);
-  },
-
-  accept: function(node) {
-    return this[node.type](node);
-  },
-
-  program: function(program) {
-    var statements = program.statements, statement;
-    this.opcodes = [];
-
-    for(var i=0, l=statements.length; i<l; i++) {
-      statement = statements[i];
-      this[statement.type](statement);
-    }
-    this.isSimple = l === 1;
-
-    this.depths.list = this.depths.list.sort(function(a, b) {
-      return a - b;
-    });
-
-    return this;
-  },
-
-  compileProgram: function(program) {
-    var result = new this.compiler().compile(program, this.options);
-    var guid = this.guid++, depth;
-
-    this.usePartial = this.usePartial || result.usePartial;
-
-    this.children[guid] = result;
-
-    for(var i=0, l=result.depths.list.length; i<l; i++) {
-      depth = result.depths.list[i];
-
-      if(depth < 2) { continue; }
-      else { this.addDepth(depth - 1); }
-    }
-
-    return guid;
-  },
-
-  block: function(block) {
-    var mustache = block.mustache,
-        program = block.program,
-        inverse = block.inverse;
-
-    if (program) {
-      program = this.compileProgram(program);
-    }
-
-    if (inverse) {
-      inverse = this.compileProgram(inverse);
-    }
-
-    var type = this.classifyMustache(mustache);
-
-    if (type === "helper") {
-      this.helperMustache(mustache, program, inverse);
-    } else if (type === "simple") {
-      this.simpleMustache(mustache);
-
-      // now that the simple mustache is resolved, we need to
-      // evaluate it by executing `blockHelperMissing`
-      this.opcode('pushProgram', program);
-      this.opcode('pushProgram', inverse);
-      this.opcode('emptyHash');
-      this.opcode('blockValue');
-    } else {
-      this.ambiguousMustache(mustache, program, inverse);
-
-      // now that the simple mustache is resolved, we need to
-      // evaluate it by executing `blockHelperMissing`
-      this.opcode('pushProgram', program);
-      this.opcode('pushProgram', inverse);
-      this.opcode('emptyHash');
-      this.opcode('ambiguousBlockValue');
-    }
-
-    this.opcode('append');
-  },
-
-  hash: function(hash) {
-    var pairs = hash.pairs, pair, val;
-
-    this.opcode('pushHash');
-
-    for(var i=0, l=pairs.length; i<l; i++) {
-      pair = pairs[i];
-      val  = pair[1];
-
-      if (this.options.stringParams) {
-        if(val.depth) {
-          this.addDepth(val.depth);
-        }
-        this.opcode('getContext', val.depth || 0);
-        this.opcode('pushStringParam', val.stringModeValue, val.type);
-      } else {
-        this.accept(val);
-      }
-
-      this.opcode('assignToHash', pair[0]);
-    }
-    this.opcode('popHash');
-  },
-
-  partial: function(partial) {
-    var partialName = partial.partialName;
-    this.usePartial = true;
-
-    if(partial.context) {
-      this.ID(partial.context);
-    } else {
-      this.opcode('push', 'depth0');
-    }
-
-    this.opcode('invokePartial', partialName.name);
-    this.opcode('append');
-  },
-
-  content: function(content) {
-    this.opcode('appendContent', content.string);
-  },
-
-  mustache: function(mustache) {
-    var options = this.options;
-    var type = this.classifyMustache(mustache);
-
-    if (type === "simple") {
-      this.simpleMustache(mustache);
-    } else if (type === "helper") {
-      this.helperMustache(mustache);
-    } else {
-      this.ambiguousMustache(mustache);
-    }
-
-    if(mustache.escaped && !options.noEscape) {
-      this.opcode('appendEscaped');
-    } else {
-      this.opcode('append');
-    }
-  },
-
-  ambiguousMustache: function(mustache, program, inverse) {
-    var id = mustache.id,
-        name = id.parts[0],
-        isBlock = program != null || inverse != null;
-
-    this.opcode('getContext', id.depth);
-
-    this.opcode('pushProgram', program);
-    this.opcode('pushProgram', inverse);
-
-    this.opcode('invokeAmbiguous', name, isBlock);
-  },
-
-  simpleMustache: function(mustache) {
-    var id = mustache.id;
-
-    if (id.type === 'DATA') {
-      this.DATA(id);
-    } else if (id.parts.length) {
-      this.ID(id);
-    } else {
-      // Simplified ID for `this`
-      this.addDepth(id.depth);
-      this.opcode('getContext', id.depth);
-      this.opcode('pushContext');
-    }
-
-    this.opcode('resolvePossibleLambda');
-  },
-
-  helperMustache: function(mustache, program, inverse) {
-    var params = this.setupFullMustacheParams(mustache, program, inverse),
-        name = mustache.id.parts[0];
-
-    if (this.options.knownHelpers[name]) {
-      this.opcode('invokeKnownHelper', params.length, name);
-    } else if (this.options.knownHelpersOnly) {
-      throw new Error("You specified knownHelpersOnly, but used the unknown helper " + name);
-    } else {
-      this.opcode('invokeHelper', params.length, name);
-    }
-  },
-
-  ID: function(id) {
-    this.addDepth(id.depth);
-    this.opcode('getContext', id.depth);
-
-    var name = id.parts[0];
-    if (!name) {
-      this.opcode('pushContext');
-    } else {
-      this.opcode('lookupOnContext', id.parts[0]);
-    }
-
-    for(var i=1, l=id.parts.length; i<l; i++) {
-      this.opcode('lookup', id.parts[i]);
-    }
-  },
-
-  DATA: function(data) {
-    this.options.data = true;
-    if (data.id.isScoped || data.id.depth) {
-      throw new Handlebars.Exception('Scoped data references are not supported: ' + data.original);
-    }
-
-    this.opcode('lookupData');
-    var parts = data.id.parts;
-    for(var i=0, l=parts.length; i<l; i++) {
-      this.opcode('lookup', parts[i]);
-    }
-  },
-
-  STRING: function(string) {
-    this.opcode('pushString', string.string);
-  },
-
-  INTEGER: function(integer) {
-    this.opcode('pushLiteral', integer.integer);
-  },
-
-  BOOLEAN: function(bool) {
-    this.opcode('pushLiteral', bool.bool);
-  },
-
-  comment: function() {},
-
-  // HELPERS
-  opcode: function(name) {
-    this.opcodes.push({ opcode: name, args: [].slice.call(arguments, 1) });
-  },
-
-  declare: function(name, value) {
-    this.opcodes.push({ opcode: 'DECLARE', name: name, value: value });
-  },
-
-  addDepth: function(depth) {
-    if(isNaN(depth)) { throw new Error("EWOT"); }
-    if(depth === 0) { return; }
-
-    if(!this.depths[depth]) {
-      this.depths[depth] = true;
-      this.depths.list.push(depth);
-    }
-  },
-
-  classifyMustache: function(mustache) {
-    var isHelper   = mustache.isHelper;
-    var isEligible = mustache.eligibleHelper;
-    var options    = this.options;
-
-    // if ambiguous, we can possibly resolve the ambiguity now
-    if (isEligible && !isHelper) {
-      var name = mustache.id.parts[0];
-
-      if (options.knownHelpers[name]) {
-        isHelper = true;
-      } else if (options.knownHelpersOnly) {
-        isEligible = false;
-      }
-    }
-
-    if (isHelper) { return "helper"; }
-    else if (isEligible) { return "ambiguous"; }
-    else { return "simple"; }
-  },
-
-  pushParams: function(params) {
-    var i = params.length, param;
-
-    while(i--) {
-      param = params[i];
-
-      if(this.options.stringParams) {
-        if(param.depth) {
-          this.addDepth(param.depth);
-        }
-
-        this.opcode('getContext', param.depth || 0);
-        this.opcode('pushStringParam', param.stringModeValue, param.type);
-      } else {
-        this[param.type](param);
-      }
-    }
-  },
-
-  setupMustacheParams: function(mustache) {
-    var params = mustache.params;
-    this.pushParams(params);
-
-    if(mustache.hash) {
-      this.hash(mustache.hash);
-    } else {
-      this.opcode('emptyHash');
-    }
-
-    return params;
-  },
-
-  // this will replace setupMustacheParams when we're done
-  setupFullMustacheParams: function(mustache, program, inverse) {
-    var params = mustache.params;
-    this.pushParams(params);
-
-    this.opcode('pushProgram', program);
-    this.opcode('pushProgram', inverse);
-
-    if(mustache.hash) {
-      this.hash(mustache.hash);
-    } else {
-      this.opcode('emptyHash');
-    }
-
-    return params;
-  }
-};
-
-var Literal = function(value) {
-  this.value = value;
-};
-
-JavaScriptCompiler.prototype = {
-  // PUBLIC API: You can override these methods in a subclass to provide
-  // alternative compiled forms for name lookup and buffering semantics
-  nameLookup: function(parent, name /* , type*/) {
-    if (/^[0-9]+$/.test(name)) {
-      return parent + "[" + name + "]";
-    } else if (JavaScriptCompiler.isValidJavaScriptVariableName(name)) {
-      return parent + "." + name;
-    }
-    else {
-      return parent + "['" + name + "']";
-    }
-  },
-
-  appendToBuffer: function(string) {
-    if (this.environment.isSimple) {
-      return "return " + string + ";";
-    } else {
-      return {
-        appendToBuffer: true,
-        content: string,
-        toString: function() { return "buffer += " + string + ";"; }
-      };
-    }
-  },
-
-  initializeBuffer: function() {
-    return this.quotedString("");
-  },
-
-  namespace: "Handlebars",
-  // END PUBLIC API
-
-  compile: function(environment, options, context, asObject) {
-    this.environment = environment;
-    this.options = options || {};
-
-    Handlebars.log(Handlebars.logger.DEBUG, this.environment.disassemble() + "\n\n");
-
-    this.name = this.environment.name;
-    this.isChild = !!context;
-    this.context = context || {
-      programs: [],
-      environments: [],
-      aliases: { }
-    };
-
-    this.preamble();
-
-    this.stackSlot = 0;
-    this.stackVars = [];
-    this.registers = { list: [] };
-    this.compileStack = [];
-    this.inlineStack = [];
-
-    this.compileChildren(environment, options);
-
-    var opcodes = environment.opcodes, opcode;
-
-    this.i = 0;
-
-    for(l=opcodes.length; this.i<l; this.i++) {
-      opcode = opcodes[this.i];
-
-      if(opcode.opcode === 'DECLARE') {
-        this[opcode.name] = opcode.value;
-      } else {
-        this[opcode.opcode].apply(this, opcode.args);
-      }
-    }
-
-    return this.createFunctionContext(asObject);
-  },
-
-  nextOpcode: function() {
-    var opcodes = this.environment.opcodes;
-    return opcodes[this.i + 1];
-  },
-
-  eat: function() {
-    this.i = this.i + 1;
-  },
-
-  preamble: function() {
-    var out = [];
-
-    if (!this.isChild) {
-      var namespace = this.namespace;
-
-      var copies = "helpers = this.merge(helpers, " + namespace + ".helpers);";
-      if (this.environment.usePartial) { copies = copies + " partials = this.merge(partials, " + namespace + ".partials);"; }
-      if (this.options.data) { copies = copies + " data = data || {};"; }
-      out.push(copies);
-    } else {
-      out.push('');
-    }
-
-    if (!this.environment.isSimple) {
-      out.push(", buffer = " + this.initializeBuffer());
-    } else {
-      out.push("");
-    }
-
-    // track the last context pushed into place to allow skipping the
-    // getContext opcode when it would be a noop
-    this.lastContext = 0;
-    this.source = out;
-  },
-
-  createFunctionContext: function(asObject) {
-    var locals = this.stackVars.concat(this.registers.list);
-
-    if(locals.length > 0) {
-      this.source[1] = this.source[1] + ", " + locals.join(", ");
-    }
-
-    // Generate minimizer alias mappings
-    if (!this.isChild) {
-      for (var alias in this.context.aliases) {
-        if (this.context.aliases.hasOwnProperty(alias)) {
-          this.source[1] = this.source[1] + ', ' + alias + '=' + this.context.aliases[alias];
-        }
-      }
-    }
-
-    if (this.source[1]) {
-      this.source[1] = "var " + this.source[1].substring(2) + ";";
-    }
-
-    // Merge children
-    if (!this.isChild) {
-      this.source[1] += '\n' + this.context.programs.join('\n') + '\n';
-    }
-
-    if (!this.environment.isSimple) {
-      this.source.push("return buffer;");
-    }
-
-    var params = this.isChild ? ["depth0", "data"] : ["Handlebars", "depth0", "helpers", "partials", "data"];
-
-    for(var i=0, l=this.environment.depths.list.length; i<l; i++) {
-      params.push("depth" + this.environment.depths.list[i]);
-    }
-
-    // Perform a second pass over the output to merge content when possible
-    var source = this.mergeSource();
-
-    if (!this.isChild) {
-      var revision = Handlebars.COMPILER_REVISION,
-          versions = Handlebars.REVISION_CHANGES[revision];
-      source = "this.compilerInfo = ["+revision+",'"+versions+"'];\n"+source;
-    }
-
-    if (asObject) {
-      params.push(source);
-
-      return Function.apply(this, params);
-    } else {
-      var functionSource = 'function ' + (this.name || '') + '(' + params.join(',') + ') {\n  ' + source + '}';
-      Handlebars.log(Handlebars.logger.DEBUG, functionSource + "\n\n");
-      return functionSource;
-    }
-  },
-  mergeSource: function() {
-    // WARN: We are not handling the case where buffer is still populated as the source should
-    // not have buffer append operations as their final action.
-    var source = '',
-        buffer;
-    for (var i = 0, len = this.source.length; i < len; i++) {
-      var line = this.source[i];
-      if (line.appendToBuffer) {
-        if (buffer) {
-          buffer = buffer + '\n    + ' + line.content;
-        } else {
-          buffer = line.content;
-        }
-      } else {
-        if (buffer) {
-          source += 'buffer += ' + buffer + ';\n  ';
-          buffer = undefined;
-        }
-        source += line + '\n  ';
-      }
-    }
-    return source;
-  },
-
-  // [blockValue]
-  //
-  // On stack, before: hash, inverse, program, value
-  // On stack, after: return value of blockHelperMissing
-  //
-  // The purpose of this opcode is to take a block of the form
-  // `{{#foo}}...{{/foo}}`, resolve the value of `foo`, and
-  // replace it on the stack with the result of properly
-  // invoking blockHelperMissing.
-  blockValue: function() {
-    this.context.aliases.blockHelperMissing = 'helpers.blockHelperMissing';
-
-    var params = ["depth0"];
-    this.setupParams(0, params);
-
-    this.replaceStack(function(current) {
-      params.splice(1, 0, current);
-      return "blockHelperMissing.call(" + params.join(", ") + ")";
-    });
-  },
-
-  // [ambiguousBlockValue]
-  //
-  // On stack, before: hash, inverse, program, value
-  // Compiler value, before: lastHelper=value of last found helper, if any
-  // On stack, after, if no lastHelper: same as [blockValue]
-  // On stack, after, if lastHelper: value
-  ambiguousBlockValue: function() {
-    this.context.aliases.blockHelperMissing = 'helpers.blockHelperMissing';
-
-    var params = ["depth0"];
-    this.setupParams(0, params);
-
-    var current = this.topStack();
-    params.splice(1, 0, current);
-
-    // Use the options value generated from the invocation
-    params[params.length-1] = 'options';
-
-    this.source.push("if (!" + this.lastHelper + ") { " + current + " = blockHelperMissing.call(" + params.join(", ") + "); }");
-  },
-
-  // [appendContent]
-  //
-  // On stack, before: ...
-  // On stack, after: ...
-  //
-  // Appends the string value of `content` to the current buffer
-  appendContent: function(content) {
-    this.source.push(this.appendToBuffer(this.quotedString(content)));
-  },
-
-  // [append]
-  //
-  // On stack, before: value, ...
-  // On stack, after: ...
-  //
-  // Coerces `value` to a String and appends it to the current buffer.
-  //
-  // If `value` is truthy, or 0, it is coerced into a string and appended
-  // Otherwise, the empty string is appended
-  append: function() {
-    // Force anything that is inlined onto the stack so we don't have duplication
-    // when we examine local
-    this.flushInline();
-    var local = this.popStack();
-    this.source.push("if(" + local + " || " + local + " === 0) { " + this.appendToBuffer(local) + " }");
-    if (this.environment.isSimple) {
-      this.source.push("else { " + this.appendToBuffer("''") + " }");
-    }
-  },
-
-  // [appendEscaped]
-  //
-  // On stack, before: value, ...
-  // On stack, after: ...
-  //
-  // Escape `value` and append it to the buffer
-  appendEscaped: function() {
-    this.context.aliases.escapeExpression = 'this.escapeExpression';
-
-    this.source.push(this.appendToBuffer("escapeExpression(" + this.popStack() + ")"));
-  },
-
-  // [getContext]
-  //
-  // On stack, before: ...
-  // On stack, after: ...
-  // Compiler value, after: lastContext=depth
-  //
-  // Set the value of the `lastContext` compiler value to the depth
-  getContext: function(depth) {
-    if(this.lastContext !== depth) {
-      this.lastContext = depth;
-    }
-  },
-
-  // [lookupOnContext]
-  //
-  // On stack, before: ...
-  // On stack, after: currentContext[name], ...
-  //
-  // Looks up the value of `name` on the current context and pushes
-  // it onto the stack.
-  lookupOnContext: function(name) {
-    this.push(this.nameLookup('depth' + this.lastContext, name, 'context'));
-  },
-
-  // [pushContext]
-  //
-  // On stack, before: ...
-  // On stack, after: currentContext, ...
-  //
-  // Pushes the value of the current context onto the stack.
-  pushContext: function() {
-    this.pushStackLiteral('depth' + this.lastContext);
-  },
-
-  // [resolvePossibleLambda]
-  //
-  // On stack, before: value, ...
-  // On stack, after: resolved value, ...
-  //
-  // If the `value` is a lambda, replace it on the stack by
-  // the return value of the lambda
-  resolvePossibleLambda: function() {
-    this.context.aliases.functionType = '"function"';
-
-    this.replaceStack(function(current) {
-      return "typeof " + current + " === functionType ? " + current + ".apply(depth0) : " + current;
-    });
-  },
-
-  // [lookup]
-  //
-  // On stack, before: value, ...
-  // On stack, after: value[name], ...
-  //
-  // Replace the value on the stack with the result of looking
-  // up `name` on `value`
-  lookup: function(name) {
-    this.replaceStack(function(current) {
-      return current + " == null || " + current + " === false ? " + current + " : " + this.nameLookup(current, name, 'context');
-    });
-  },
-
-  // [lookupData]
-  //
-  // On stack, before: ...
-  // On stack, after: data[id], ...
-  //
-  // Push the result of looking up `id` on the current data
-  lookupData: function(id) {
-    this.push('data');
-  },
-
-  // [pushStringParam]
-  //
-  // On stack, before: ...
-  // On stack, after: string, currentContext, ...
-  //
-  // This opcode is designed for use in string mode, which
-  // provides the string value of a parameter along with its
-  // depth rather than resolving it immediately.
-  pushStringParam: function(string, type) {
-    this.pushStackLiteral('depth' + this.lastContext);
-
-    this.pushString(type);
-
-    if (typeof string === 'string') {
-      this.pushString(string);
-    } else {
-      this.pushStackLiteral(string);
-    }
-  },
-
-  emptyHash: function() {
-    this.pushStackLiteral('{}');
-
-    if (this.options.stringParams) {
-      this.register('hashTypes', '{}');
-      this.register('hashContexts', '{}');
-    }
-  },
-  pushHash: function() {
-    this.hash = {values: [], types: [], contexts: []};
-  },
-  popHash: function() {
-    var hash = this.hash;
-    this.hash = undefined;
-
-    if (this.options.stringParams) {
-      this.register('hashContexts', '{' + hash.contexts.join(',') + '}');
-      this.register('hashTypes', '{' + hash.types.join(',') + '}');
-    }
-    this.push('{\n    ' + hash.values.join(',\n    ') + '\n  }');
-  },
-
-  // [pushString]
-  //
-  // On stack, before: ...
-  // On stack, after: quotedString(string), ...
-  //
-  // Push a quoted version of `string` onto the stack
-  pushString: function(string) {
-    this.pushStackLiteral(this.quotedString(string));
-  },
-
-  // [push]
-  //
-  // On stack, before: ...
-  // On stack, after: expr, ...
-  //
-  // Push an expression onto the stack
-  push: function(expr) {
-    this.inlineStack.push(expr);
-    return expr;
-  },
-
-  // [pushLiteral]
-  //
-  // On stack, before: ...
-  // On stack, after: value, ...
-  //
-  // Pushes a value onto the stack. This operation prevents
-  // the compiler from creating a temporary variable to hold
-  // it.
-  pushLiteral: function(value) {
-    this.pushStackLiteral(value);
-  },
-
-  // [pushProgram]
-  //
-  // On stack, before: ...
-  // On stack, after: program(guid), ...
-  //
-  // Push a program expression onto the stack. This takes
-  // a compile-time guid and converts it into a runtime-accessible
-  // expression.
-  pushProgram: function(guid) {
-    if (guid != null) {
-      this.pushStackLiteral(this.programExpression(guid));
-    } else {
-      this.pushStackLiteral(null);
-    }
-  },
-
-  // [invokeHelper]
-  //
-  // On stack, before: hash, inverse, program, params..., ...
-  // On stack, after: result of helper invocation
-  //
-  // Pops off the helper's parameters, invokes the helper,
-  // and pushes the helper's return value onto the stack.
-  //
-  // If the helper is not found, `helperMissing` is called.
-  invokeHelper: function(paramSize, name) {
-    this.context.aliases.helperMissing = 'helpers.helperMissing';
-
-    var helper = this.lastHelper = this.setupHelper(paramSize, name, true);
-    var nonHelper = this.nameLookup('depth' + this.lastContext, name, 'context');
-
-    this.push(helper.name + ' || ' + nonHelper);
-    this.replaceStack(function(name) {
-      return name + ' ? ' + name + '.call(' +
-          helper.callParams + ") " + ": helperMissing.call(" +
-          helper.helperMissingParams + ")";
-    });
-  },
-
-  // [invokeKnownHelper]
-  //
-  // On stack, before: hash, inverse, program, params..., ...
-  // On stack, after: result of helper invocation
-  //
-  // This operation is used when the helper is known to exist,
-  // so a `helperMissing` fallback is not required.
-  invokeKnownHelper: function(paramSize, name) {
-    var helper = this.setupHelper(paramSize, name);
-    this.push(helper.name + ".call(" + helper.callParams + ")");
-  },
-
-  // [invokeAmbiguous]
-  //
-  // On stack, before: hash, inverse, program, params..., ...
-  // On stack, after: result of disambiguation
-  //
-  // This operation is used when an expression like `{{foo}}`
-  // is provided, but we don't know at compile-time whether it
-  // is a helper or a path.
-  //
-  // This operation emits more code than the other options,
-  // and can be avoided by passing the `knownHelpers` and
-  // `knownHelpersOnly` flags at compile-time.
-  invokeAmbiguous: function(name, helperCall) {
-    this.context.aliases.functionType = '"function"';
-
-    this.pushStackLiteral('{}');    // Hash value
-    var helper = this.setupHelper(0, name, helperCall);
-
-    var helperName = this.lastHelper = this.nameLookup('helpers', name, 'helper');
-
-    var nonHelper = this.nameLookup('depth' + this.lastContext, name, 'context');
-    var nextStack = this.nextStack();
-
-    this.source.push('if (' + nextStack + ' = ' + helperName + ') { ' + nextStack + ' = ' + nextStack + '.call(' + helper.callParams + '); }');
-    this.source.push('else { ' + nextStack + ' = ' + nonHelper + '; ' + nextStack + ' = typeof ' + nextStack + ' === functionType ? ' + nextStack + '.apply(depth0) : ' + nextStack + '; }');
-  },
-
-  // [invokePartial]
-  //
-  // On stack, before: context, ...
-  // On stack after: result of partial invocation
-  //
-  // This operation pops off a context, invokes a partial with that context,
-  // and pushes the result of the invocation back.
-  invokePartial: function(name) {
-    var params = [this.nameLookup('partials', name, 'partial'), "'" + name + "'", this.popStack(), "helpers", "partials"];
-
-    if (this.options.data) {
-      params.push("data");
-    }
-
-    this.context.aliases.self = "this";
-    this.push("self.invokePartial(" + params.join(", ") + ")");
-  },
-
-  // [assignToHash]
-  //
-  // On stack, before: value, hash, ...
-  // On stack, after: hash, ...
-  //
-  // Pops a value and hash off the stack, assigns `hash[key] = value`
-  // and pushes the hash back onto the stack.
-  assignToHash: function(key) {
-    var value = this.popStack(),
-        context,
-        type;
-
-    if (this.options.stringParams) {
-      type = this.popStack();
-      context = this.popStack();
-    }
-
-    var hash = this.hash;
-    if (context) {
-      hash.contexts.push("'" + key + "': " + context);
-    }
-    if (type) {
-      hash.types.push("'" + key + "': " + type);
-    }
-    hash.values.push("'" + key + "': (" + value + ")");
-  },
-
-  // HELPERS
-
-  compiler: JavaScriptCompiler,
-
-  compileChildren: function(environment, options) {
-    var children = environment.children, child, compiler;
-
-    for(var i=0, l=children.length; i<l; i++) {
-      child = children[i];
-      compiler = new this.compiler();
-
-      var index = this.matchExistingProgram(child);
-
-      if (index == null) {
-        this.context.programs.push('');     // Placeholder to prevent name conflicts for nested children
-        index = this.context.programs.length;
-        child.index = index;
-        child.name = 'program' + index;
-        this.context.programs[index] = compiler.compile(child, options, this.context);
-        this.context.environments[index] = child;
-      } else {
-        child.index = index;
-        child.name = 'program' + index;
-      }
-    }
-  },
-  matchExistingProgram: function(child) {
-    for (var i = 0, len = this.context.environments.length; i < len; i++) {
-      var environment = this.context.environments[i];
-      if (environment && environment.equals(child)) {
-        return i;
-      }
-    }
-  },
-
-  programExpression: function(guid) {
-    this.context.aliases.self = "this";
-
-    if(guid == null) {
-      return "self.noop";
-    }
-
-    var child = this.environment.children[guid],
-        depths = child.depths.list, depth;
-
-    var programParams = [child.index, child.name, "data"];
-
-    for(var i=0, l = depths.length; i<l; i++) {
-      depth = depths[i];
-
-      if(depth === 1) { programParams.push("depth0"); }
-      else { programParams.push("depth" + (depth - 1)); }
-    }
-
-    return (depths.length === 0 ? "self.program(" : "self.programWithDepth(") + programParams.join(", ") + ")";
-  },
-
-  register: function(name, val) {
-    this.useRegister(name);
-    this.source.push(name + " = " + val + ";");
-  },
-
-  useRegister: function(name) {
-    if(!this.registers[name]) {
-      this.registers[name] = true;
-      this.registers.list.push(name);
-    }
-  },
-
-  pushStackLiteral: function(item) {
-    return this.push(new Literal(item));
-  },
-
-  pushStack: function(item) {
-    this.flushInline();
-
-    var stack = this.incrStack();
-    if (item) {
-      this.source.push(stack + " = " + item + ";");
-    }
-    this.compileStack.push(stack);
-    return stack;
-  },
-
-  replaceStack: function(callback) {
-    var prefix = '',
-        inline = this.isInline(),
-        stack;
-
-    // If we are currently inline then we want to merge the inline statement into the
-    // replacement statement via ','
-    if (inline) {
-      var top = this.popStack(true);
-
-      if (top instanceof Literal) {
-        // Literals do not need to be inlined
-        stack = top.value;
-      } else {
-        // Get or create the current stack name for use by the inline
-        var name = this.stackSlot ? this.topStackName() : this.incrStack();
-
-        prefix = '(' + this.push(name) + ' = ' + top + '),';
-        stack = this.topStack();
-      }
-    } else {
-      stack = this.topStack();
-    }
-
-    var item = callback.call(this, stack);
-
-    if (inline) {
-      if (this.inlineStack.length || this.compileStack.length) {
-        this.popStack();
-      }
-      this.push('(' + prefix + item + ')');
-    } else {
-      // Prevent modification of the context depth variable. Through replaceStack
-      if (!/^stack/.test(stack)) {
-        stack = this.nextStack();
-      }
-
-      this.source.push(stack + " = (" + prefix + item + ");");
-    }
-    return stack;
-  },
-
-  nextStack: function() {
-    return this.pushStack();
-  },
-
-  incrStack: function() {
-    this.stackSlot++;
-    if(this.stackSlot > this.stackVars.length) { this.stackVars.push("stack" + this.stackSlot); }
-    return this.topStackName();
-  },
-  topStackName: function() {
-    return "stack" + this.stackSlot;
-  },
-  flushInline: function() {
-    var inlineStack = this.inlineStack;
-    if (inlineStack.length) {
-      this.inlineStack = [];
-      for (var i = 0, len = inlineStack.length; i < len; i++) {
-        var entry = inlineStack[i];
-        if (entry instanceof Literal) {
-          this.compileStack.push(entry);
-        } else {
-          this.pushStack(entry);
-        }
-      }
-    }
-  },
-  isInline: function() {
-    return this.inlineStack.length;
-  },
-
-  popStack: function(wrapped) {
-    var inline = this.isInline(),
-        item = (inline ? this.inlineStack : this.compileStack).pop();
-
-    if (!wrapped && (item instanceof Literal)) {
-      return item.value;
-    } else {
-      if (!inline) {
-        this.stackSlot--;
-      }
-      return item;
-    }
-  },
-
-  topStack: function(wrapped) {
-    var stack = (this.isInline() ? this.inlineStack : this.compileStack),
-        item = stack[stack.length - 1];
-
-    if (!wrapped && (item instanceof Literal)) {
-      return item.value;
-    } else {
-      return item;
-    }
-  },
-
-  quotedString: function(str) {
-    return '"' + str
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r')
-      .replace(/\u2028/g, '\\u2028')   // Per Ecma-262 7.3 + 7.8.4
-      .replace(/\u2029/g, '\\u2029') + '"';
-  },
-
-  setupHelper: function(paramSize, name, missingParams) {
-    var params = [];
-    this.setupParams(paramSize, params, missingParams);
-    var foundHelper = this.nameLookup('helpers', name, 'helper');
-
-    return {
-      params: params,
-      name: foundHelper,
-      callParams: ["depth0"].concat(params).join(", "),
-      helperMissingParams: missingParams && ["depth0", this.quotedString(name)].concat(params).join(", ")
-    };
-  },
-
-  // the params and contexts arguments are passed in arrays
-  // to fill in
-  setupParams: function(paramSize, params, useRegister) {
-    var options = [], contexts = [], types = [], param, inverse, program;
-
-    options.push("hash:" + this.popStack());
-
-    inverse = this.popStack();
-    program = this.popStack();
-
-    // Avoid setting fn and inverse if neither are set. This allows
-    // helpers to do a check for `if (options.fn)`
-    if (program || inverse) {
-      if (!program) {
-        this.context.aliases.self = "this";
-        program = "self.noop";
-      }
-
-      if (!inverse) {
-       this.context.aliases.self = "this";
-        inverse = "self.noop";
-      }
-
-      options.push("inverse:" + inverse);
-      options.push("fn:" + program);
-    }
-
-    for(var i=0; i<paramSize; i++) {
-      param = this.popStack();
-      params.push(param);
-
-      if(this.options.stringParams) {
-        types.push(this.popStack());
-        contexts.push(this.popStack());
-      }
-    }
-
-    if (this.options.stringParams) {
-      options.push("contexts:[" + contexts.join(",") + "]");
-      options.push("types:[" + types.join(",") + "]");
-      options.push("hashContexts:hashContexts");
-      options.push("hashTypes:hashTypes");
-    }
-
-    if(this.options.data) {
-      options.push("data:data");
-    }
-
-    options = "{" + options.join(",") + "}";
-    if (useRegister) {
-      this.register('options', options);
-      params.push('options');
-    } else {
-      params.push(options);
-    }
-    return params.join(", ");
-  }
-};
-
-var reservedWords = (
-  "break else new var" +
-  " case finally return void" +
-  " catch for switch while" +
-  " continue function this with" +
-  " default if throw" +
-  " delete in try" +
-  " do instanceof typeof" +
-  " abstract enum int short" +
-  " boolean export interface static" +
-  " byte extends long super" +
-  " char final native synchronized" +
-  " class float package throws" +
-  " const goto private transient" +
-  " debugger implements protected volatile" +
-  " double import public let yield"
-).split(" ");
-
-var compilerWords = JavaScriptCompiler.RESERVED_WORDS = {};
-
-for(var i=0, l=reservedWords.length; i<l; i++) {
-  compilerWords[reservedWords[i]] = true;
-}
-
-JavaScriptCompiler.isValidJavaScriptVariableName = function(name) {
-  if(!JavaScriptCompiler.RESERVED_WORDS[name] && /^[a-zA-Z_$][0-9a-zA-Z_$]+$/.test(name)) {
-    return true;
-  }
-  return false;
-};
-
-Handlebars.precompile = function(input, options) {
-  if (input == null || (typeof input !== 'string' && input.constructor !== Handlebars.AST.ProgramNode)) {
-    throw new Handlebars.Exception("You must pass a string or Handlebars AST to Handlebars.precompile. You passed " + input);
-  }
-
-  options = options || {};
-  if (!('data' in options)) {
-    options.data = true;
-  }
-  var ast = Handlebars.parse(input);
-  var environment = new Compiler().compile(ast, options);
-  return new JavaScriptCompiler().compile(environment, options);
-};
-
-Handlebars.compile = function(input, options) {
-  if (input == null || (typeof input !== 'string' && input.constructor !== Handlebars.AST.ProgramNode)) {
-    throw new Handlebars.Exception("You must pass a string or Handlebars AST to Handlebars.compile. You passed " + input);
-  }
-
-  options = options || {};
-  if (!('data' in options)) {
-    options.data = true;
-  }
-  var compiled;
-  function compile() {
-    var ast = Handlebars.parse(input);
-    var environment = new Compiler().compile(ast, options);
-    var templateSpec = new JavaScriptCompiler().compile(environment, options, undefined, true);
-    return Handlebars.template(templateSpec);
-  }
-
-  // Template is only compiled on first use and cached after that point.
-  return function(context, options) {
-    if (!compiled) {
-      compiled = compile();
-    }
-    return compiled.call(this, context, options);
-  };
-};
-
-;
-// lib/handlebars/runtime.js
-
-Handlebars.VM = {
-  template: function(templateSpec) {
-    // Just add water
-    var container = {
-      escapeExpression: Handlebars.Utils.escapeExpression,
-      invokePartial: Handlebars.VM.invokePartial,
-      programs: [],
-      program: function(i, fn, data) {
-        var programWrapper = this.programs[i];
-        if(data) {
-          programWrapper = Handlebars.VM.program(i, fn, data);
-        } else if (!programWrapper) {
-          programWrapper = this.programs[i] = Handlebars.VM.program(i, fn);
-        }
-        return programWrapper;
-      },
-      merge: function(param, common) {
-        var ret = param || common;
-
-        if (param && common) {
-          ret = {};
-          Handlebars.Utils.extend(ret, common);
-          Handlebars.Utils.extend(ret, param);
-        }
-        return ret;
-      },
-      programWithDepth: Handlebars.VM.programWithDepth,
-      noop: Handlebars.VM.noop,
-      compilerInfo: null
-    };
-
-    return function(context, options) {
-      options = options || {};
-      var result = templateSpec.call(container, Handlebars, context, options.helpers, options.partials, options.data);
-
-      var compilerInfo = container.compilerInfo || [],
-          compilerRevision = compilerInfo[0] || 1,
-          currentRevision = Handlebars.COMPILER_REVISION;
-
-      if (compilerRevision !== currentRevision) {
-        if (compilerRevision < currentRevision) {
-          var runtimeVersions = Handlebars.REVISION_CHANGES[currentRevision],
-              compilerVersions = Handlebars.REVISION_CHANGES[compilerRevision];
-          throw "Template was precompiled with an older version of Handlebars than the current runtime. "+
-                "Please update your precompiler to a newer version ("+runtimeVersions+") or downgrade your runtime to an older version ("+compilerVersions+").";
-        } else {
-          // Use the embedded version info since the runtime doesn't know about this revision yet
-          throw "Template was precompiled with a newer version of Handlebars than the current runtime. "+
-                "Please update your runtime to a newer version ("+compilerInfo[1]+").";
-        }
-      }
-
-      return result;
-    };
-  },
-
-  programWithDepth: function(i, fn, data /*, $depth */) {
-    var args = Array.prototype.slice.call(arguments, 3);
-
-    var program = function(context, options) {
-      options = options || {};
-
-      return fn.apply(this, [context, options.data || data].concat(args));
-    };
-    program.program = i;
-    program.depth = args.length;
-    return program;
-  },
-  program: function(i, fn, data) {
-    var program = function(context, options) {
-      options = options || {};
-
-      return fn(context, options.data || data);
-    };
-    program.program = i;
-    program.depth = 0;
-    return program;
-  },
-  noop: function() { return ""; },
-  invokePartial: function(partial, name, context, helpers, partials, data) {
-    var options = { helpers: helpers, partials: partials, data: data };
-
-    if(partial === undefined) {
-      throw new Handlebars.Exception("The partial " + name + " could not be found");
-    } else if(partial instanceof Function) {
-      return partial(context, options);
-    } else if (!Handlebars.compile) {
-      throw new Handlebars.Exception("The partial " + name + " could not be compiled when running in runtime-only mode");
-    } else {
-      partials[name] = Handlebars.compile(partial, {data: data !== undefined});
-      return partials[name](context, options);
-    }
-  }
-};
-
-Handlebars.template = Handlebars.VM.template;
-;
-// lib/handlebars/browser-suffix.js
-})(Handlebars);
-;
-
-define("handlebars", (function (global) {
-    return function () {
-        var ret, fn;
-        return ret || global.Handlebars;
-    };
-}(this)));
-
-require([
+define('initialize',[
   'underscore',
   'jquery',
   'jquery.event.drag-2.2',
   'backbone',
   'backbone.epoxy',
+  'backbone.layoutmanager',
   'two',
-  'twitter.bootstrap',
-  'handlebars'
+  'twitter.bootstrap'
 ], function() {
-  require(['app'], function(app) {
-    app.init();
-  });
+  require(['run']);
 });
-define("initialize", function(){});
-
 define('controllers/AudioContextManager',[], function() {
   return {
     init: function() {
@@ -21859,44 +20492,6 @@ define('models/AudioNode',[
           return {rolloffFactor: value};
         }
       }
-    }
-  });
-});
-define('views/AudioNodeControlView',[
-  'backbone',
-  'backbone.epoxy'
-], function(
-  Backbone
-  ) {
-  return Backbone.Epoxy.View.extend({
-    className: 'modal hide fade controls',
-
-    events: {
-      'hidden': function() {
-        this.remove();
-      }
-    },
-
-    bindings: {
-      "input[name='rolloffFactor']": "value:pannerRolloffFactor",
-      "input[name='orientationX']": "value:orientationX",
-      "input[name='orientationY']": "value:orientationY",
-      "input[name='orientationZ']": "value:orientationZ",
-      "input[name='coneInnerAngle']": "value:coneInnerAngle",
-      "input[name='coneOuterAngle']": "value:coneOuterAngle"
-    },
-
-    template: function() {
-      var source = $('#AudioNodeControlTemplate').html();
-      return Handlebars.compile(source);
-    },
-
-    render: function() {
-      var markup = this.template();
-      this.$el.append(markup());
-      this.$('[data-toggle="popover"]').popover();
-      this.applyBindings();
-      this.$el.modal();
     }
   });
 });
@@ -23691,18 +22286,443 @@ define('controllers/Util',[
  };
 });
 
+/*
+ postal
+ Author: Jim Cowart (http://freshbrewedcode.com/jimcowart)
+ License: Dual licensed MIT (http://www.opensource.org/licenses/mit-license) & GPL (http://www.opensource.org/licenses/gpl-license)
+ Version 0.8.4
+ */
+(function ( root, factory ) {
+	if ( typeof module === "object" && module.exports ) {
+		// Node, or CommonJS-Like environments
+		module.exports = function ( _ ) {
+			_ = _ || require( "underscore" );
+			return factory( _ );
+		}
+	} else if ( typeof define === "function" && define.amd ) {
+		// AMD. Register as an anonymous module.
+		define( 'postal',["underscore"], function ( _ ) {
+			return factory( _, root );
+		} );
+	} else {
+		// Browser globals
+		root.postal = factory( root._, root );
+	}
+}( this, function ( _, global, undefined ) {
+
+	var DEFAULT_CHANNEL = "/",
+		DEFAULT_DISPOSEAFTER = 0,
+		SYSTEM_CHANNEL = "postal";
+	var ConsecutiveDistinctPredicate = function () {
+		var previous;
+		return function ( data ) {
+			var eq = false;
+			if ( _.isString( data ) ) {
+				eq = data === previous;
+				previous = data;
+			}
+			else {
+				eq = _.isEqual( data, previous );
+				previous = _.clone( data );
+			}
+			return !eq;
+		};
+	};
+	var DistinctPredicate = function () {
+		var previous = [];
+	
+		return function ( data ) {
+			var isDistinct = !_.any( previous, function ( p ) {
+				if ( _.isObject( data ) || _.isArray( data ) ) {
+					return _.isEqual( data, p );
+				}
+				return data === p;
+			} );
+			if ( isDistinct ) {
+				previous.push( data );
+			}
+			return isDistinct;
+		};
+	};
+	var ChannelDefinition = function ( channelName ) {
+		this.channel = channelName || DEFAULT_CHANNEL;
+	};
+	
+	ChannelDefinition.prototype.subscribe = function () {
+		return arguments.length === 1 ?
+		       new SubscriptionDefinition( this.channel, arguments[0].topic, arguments[0].callback ) :
+		       new SubscriptionDefinition( this.channel, arguments[0], arguments[1] );
+	};
+	
+	ChannelDefinition.prototype.publish = function () {
+		var envelope = arguments.length === 1 ?
+		                (Object.prototype.toString.call(arguments[0]) === '[object String]' ?
+	                  { topic: arguments[0] } : arguments[0]) : { topic : arguments[0], data : arguments[1] };
+		envelope.channel = this.channel;
+		return postal.configuration.bus.publish( envelope );
+	};
+	var SubscriptionDefinition = function ( channel, topic, callback ) {
+		this.channel = channel;
+		this.topic = topic;
+		this.callback = callback;
+		this.constraints = [];
+		this.context = null;
+		postal.configuration.bus.publish( {
+			channel : SYSTEM_CHANNEL,
+			topic : "subscription.created",
+			data : {
+				event : "subscription.created",
+				channel : channel,
+				topic : topic
+			}
+		} );
+		postal.configuration.bus.subscribe( this );
+	};
+	
+	SubscriptionDefinition.prototype = {
+		unsubscribe : function () {
+			this.inactive = true;
+			postal.configuration.bus.unsubscribe( this );
+			postal.configuration.bus.publish( {
+				channel : SYSTEM_CHANNEL,
+				topic : "subscription.removed",
+				data : {
+					event : "subscription.removed",
+					channel : this.channel,
+					topic : this.topic
+				}
+			} );
+		},
+	
+		defer : function () {
+			var fn = this.callback;
+			this.callback = function ( data ) {
+				setTimeout( function () {
+					fn( data );
+				}, 0 );
+			};
+			return this;
+		},
+	
+		disposeAfter : function ( maxCalls ) {
+			if ( _.isNaN( maxCalls ) || maxCalls <= 0 ) {
+				throw "The value provided to disposeAfter (maxCalls) must be a number greater than zero.";
+			}
+			var fn = this.callback;
+			var dispose = _.after( maxCalls, _.bind( function () {
+				this.unsubscribe();
+			}, this ) );
+	
+			this.callback = function () {
+				fn.apply( this.context, arguments );
+				dispose();
+			};
+			return this;
+		},
+	
+		distinctUntilChanged : function () {
+			this.withConstraint( new ConsecutiveDistinctPredicate() );
+			return this;
+		},
+	
+		distinct : function () {
+			this.withConstraint( new DistinctPredicate() );
+			return this;
+		},
+	
+		once : function () {
+			this.disposeAfter( 1 );
+			return this;
+		},
+	
+		withConstraint : function ( predicate ) {
+			if ( !_.isFunction( predicate ) ) {
+				throw "Predicate constraint must be a function";
+			}
+			this.constraints.push( predicate );
+			return this;
+		},
+	
+		withConstraints : function ( predicates ) {
+			var self = this;
+			if ( _.isArray( predicates ) ) {
+				_.each( predicates, function ( predicate ) {
+					self.withConstraint( predicate );
+				} );
+			}
+			return self;
+		},
+	
+		withContext : function ( context ) {
+			this.context = context;
+			return this;
+		},
+	
+		withDebounce : function ( milliseconds ) {
+			if ( _.isNaN( milliseconds ) ) {
+				throw "Milliseconds must be a number";
+			}
+			var fn = this.callback;
+			this.callback = _.debounce( fn, milliseconds );
+			return this;
+		},
+	
+		withDelay : function ( milliseconds ) {
+			if ( _.isNaN( milliseconds ) ) {
+				throw "Milliseconds must be a number";
+			}
+			var fn = this.callback;
+			this.callback = function ( data ) {
+				setTimeout( function () {
+					fn( data );
+				}, milliseconds );
+			};
+			return this;
+		},
+	
+		withThrottle : function ( milliseconds ) {
+			if ( _.isNaN( milliseconds ) ) {
+				throw "Milliseconds must be a number";
+			}
+			var fn = this.callback;
+			this.callback = _.throttle( fn, milliseconds );
+			return this;
+		},
+	
+		subscribe : function ( callback ) {
+			this.callback = callback;
+			return this;
+		}
+	};
+	var bindingsResolver = {
+		cache : {},
+		regex : {},
+	
+		compare : function ( binding, topic ) {
+			var pattern, rgx, prevSegment, result = (this.cache[topic] && this.cache[topic][binding]);
+			if(typeof result !== "undefined") {
+				return result;
+			}
+			if(!(rgx = this.regex[binding])) {
+				pattern = "^" + _.map(binding.split('.'), function(segment) {
+					var res = "";
+					if (!!prevSegment) {
+						res = prevSegment !== "#" ? "\\.\\b" : "\\b";
+					}
+					if(segment === "#") {
+						res += "[\\s\\S]*"
+					} else if (segment === "*") {
+						res += "[^.]+"
+					} else {
+						res += segment;
+					}
+					prevSegment = segment;
+					return res;
+				} ).join('') + "$";
+				rgx = this.regex[binding] = new RegExp( pattern );
+			}
+			this.cache[topic] = this.cache[topic] || {};
+			this.cache[topic][binding] = result = rgx.test( topic );
+			return result;
+		},
+	
+		reset : function () {
+			this.cache = {};
+			this.regex = {};
+		}
+	};
+	var fireSub = function(subDef, envelope) {
+	  if ( !subDef.inactive && postal.configuration.resolver.compare( subDef.topic, envelope.topic ) ) {
+	    if ( _.all( subDef.constraints, function ( constraint ) {
+	      return constraint.call( subDef.context, envelope.data, envelope );
+	    } ) ) {
+	      if ( typeof subDef.callback === 'function' ) {
+	        subDef.callback.call( subDef.context, envelope.data, envelope );
+	      }
+	    }
+	  }
+	};
+	
+	var pubInProgress = false;
+	var unSubQueue = [];
+	var clearUnSubQueue = function() {
+		while(unSubQueue.length) {
+			unSubQueue.shift().unsubscribe();
+		}
+	};
+	
+	var localBus = {
+		addWireTap : function ( callback ) {
+			var self = this;
+			self.wireTaps.push( callback );
+			return function () {
+				var idx = self.wireTaps.indexOf( callback );
+				if ( idx !== -1 ) {
+					self.wireTaps.splice( idx, 1 );
+				}
+			};
+		},
+	
+		publish : function ( envelope ) {
+			pubInProgress = true;
+			envelope.timeStamp = new Date();
+			_.each( this.wireTaps, function ( tap ) {
+				tap( envelope.data, envelope );
+			} );
+			if ( this.subscriptions[envelope.channel] ) {
+				_.each( this.subscriptions[envelope.channel], function ( subscribers ) {
+					var idx = 0, len = subscribers.length, subDef;
+					while ( idx < len ) {
+						if ( subDef = subscribers[idx++] ) {
+							fireSub( subDef, envelope );
+						}
+					}
+				} );
+			}
+			pubInProgress = false;
+			return envelope;
+		},
+	
+		reset : function () {
+			if ( this.subscriptions ) {
+				_.each( this.subscriptions, function ( channel ) {
+					_.each( channel, function ( topic ) {
+						while ( topic.length ) {
+							topic.pop().unsubscribe();
+						}
+					} );
+				} );
+				this.subscriptions = {};
+			}
+		},
+	
+		subscribe : function ( subDef ) {
+			var idx, found, fn, channel = this.subscriptions[subDef.channel], subs;
+			if ( !channel ) {
+				channel = this.subscriptions[subDef.channel] = {};
+			}
+			subs = this.subscriptions[subDef.channel][subDef.topic];
+			if ( !subs ) {
+				subs = this.subscriptions[subDef.channel][subDef.topic] = [];
+			}
+			subs.push( subDef );
+			return subDef;
+		},
+	
+		subscriptions : {},
+	
+		wireTaps : [],
+	
+		unsubscribe : function ( config ) {
+			if(pubInProgress) {
+				unSubQueue.push(config);
+				return;
+			}
+			if ( this.subscriptions[config.channel][config.topic] ) {
+				var len = this.subscriptions[config.channel][config.topic].length,
+					idx = 0;
+				while(idx < len) {
+					if ( this.subscriptions[config.channel][config.topic][idx] === config ) {
+						this.subscriptions[config.channel][config.topic].splice( idx, 1 );
+						break;
+					}
+					idx += 1;
+				}
+			}
+		}
+	};
+	localBus.subscriptions[SYSTEM_CHANNEL] = {};
+	var postal = {
+		configuration : {
+			bus : localBus,
+			resolver : bindingsResolver,
+			DEFAULT_CHANNEL : DEFAULT_CHANNEL,
+			SYSTEM_CHANNEL : SYSTEM_CHANNEL
+		},
+	
+		ChannelDefinition : ChannelDefinition,
+		SubscriptionDefinition : SubscriptionDefinition,
+	
+		channel : function ( channelName ) {
+			return new ChannelDefinition( channelName );
+		},
+	
+		subscribe : function ( options ) {
+			return new SubscriptionDefinition( options.channel || DEFAULT_CHANNEL, options.topic, options.callback );
+		},
+	
+		publish : function ( envelope ) {
+			envelope.channel = envelope.channel || DEFAULT_CHANNEL;
+			return postal.configuration.bus.publish( envelope );
+		},
+	
+		addWireTap : function ( callback ) {
+			return this.configuration.bus.addWireTap( callback );
+		},
+	
+		linkChannels : function ( sources, destinations ) {
+			var result   = [];
+			sources      = !_.isArray( sources ) ? [sources] : sources;
+			destinations = !_.isArray( destinations ) ? [destinations] : destinations;
+			_.each( sources, function ( source ) {
+				var sourceTopic = source.topic || "#";
+				_.each( destinations, function ( destination ) {
+					var destChannel = destination.channel || DEFAULT_CHANNEL;
+					result.push(
+						postal.subscribe( {
+							channel : source.channel || DEFAULT_CHANNEL,
+							topic : source.topic || "#",
+							callback : function ( data, env ) {
+								var newEnv = _.clone( env );
+								newEnv.topic = _.isFunction( destination.topic ) ? destination.topic( env.topic ) : destination.topic || env.topic;
+								newEnv.channel = destChannel;
+								newEnv.data = data;
+								postal.publish( newEnv );
+							}
+						} )
+					);
+				} );
+			} );
+			return result;
+		},
+	
+		utils : {
+			getSubscribersFor : function () {
+				var channel = arguments[ 0 ],
+					tpc = arguments[ 1 ];
+				if ( arguments.length === 1 ) {
+					channel = arguments[ 0 ].channel || postal.configuration.DEFAULT_CHANNEL;
+					tpc = arguments[ 0 ].topic;
+				}
+				if ( postal.configuration.bus.subscriptions[ channel ] &&
+				     postal.configuration.bus.subscriptions[ channel ].hasOwnProperty( tpc ) ) {
+					return postal.configuration.bus.subscriptions[ channel ][ tpc ];
+				}
+				return [];
+			},
+	
+			reset : function () {
+				postal.configuration.bus.reset();
+				postal.configuration.resolver.reset();
+			}
+		}
+	};
+
+	return postal;
+} ));
 define('views/AudioNode',[
   'backbone',
-  'views/AudioNodeControlView',
-  'controllers/Util'
+  'controllers/Util',
+  'postal'
 ], function(
   Backbone,
-  AudioNodeControlView,
-  Util
+  Util,
+  postal
   ) {
   return Backbone.View.extend({
     moving: false,
     className: 'circle',
+    template: '',
 
     events: {
       'drag': function(event, dd) {
@@ -23716,8 +22736,7 @@ define('views/AudioNode',[
       _.bindAll(this, 'buildSound', 'handleDrag');
     },
 
-    render: function() {
-      $('#stage').append(this.$el);
+    afterRender: function() {
       var y = this.options.y - this.$el.outerHeight() / 2;
       var x = this.options.x - this.$el.outerWidth() / 2;
       this.position(x,y);
@@ -23826,43 +22845,167 @@ define('views/AudioNode',[
     },
 
     renderControls: function() {
-      var controlView = new AudioNodeControlView({
-        model: this.model
+      postal.publish({
+        channel : "AudioNode",
+        topic   : "controls.show",
+        data    : {
+          model : this.model
+        }
       });
-      controlView.render();
     }
+  });
+});
+define('views/AudioNodeControlView',[
+  'backbone',
+  'backbone.epoxy'
+], function(
+  Backbone
+  ) {
+  return Backbone.Epoxy.View.extend({
+    className: 'modal hide fade controls',
+    template: 'AudioNodeControlView',
+
+    events: {
+      'hidden': function() {
+        this.remove();
+      }
+    },
+
+    bindings: {
+      "input[name='rolloffFactor']": "value:pannerRolloffFactor",
+      "input[name='orientationX']": "value:orientationX",
+      "input[name='orientationY']": "value:orientationY",
+      "input[name='orientationZ']": "value:orientationZ",
+      "input[name='coneInnerAngle']": "value:coneInnerAngle",
+      "input[name='coneOuterAngle']": "value:coneOuterAngle"
+    },
+
+    afterRender: function() {
+      this.$('[data-toggle="popover"]').popover();
+      this.applyBindings();
+      this.$el.modal();
+    }
+
   });
 });
 define('app',[
   'jquery',
   'controllers/AudioContextManager',
   'models/AudioNode',
-  'views/AudioNode'
+  'views/AudioNode',
+  'views/AudioNodeControlView',
+  'postal',
+  'backbone'
 ], function(
   $,
   AudioContextManager,
   AudioNodeModel,
-  AudioNodeView) {
+  AudioNodeView,
+  AudioNodeControlView,
+  postal,
+  Backbone) {
   return {
     init: function() {
-      var stage = $('#stage');
-      var listener = $('#listener');
+      // Let's make a layout!
+      var layout = new Backbone.Layout({
+        el: false,
+        template  : 'Stage'
+      });
 
-      // Fire up the audio engine.
-      AudioContextManager.init();
+      layout.render().done(function(layout) {
+        $('body').append(layout.$el);
+        // Get some handlers.
+        var stage = $('#stage');
+        var listener = $('#listener');
+        // Fire up the audio engine.
+        AudioContextManager.init();
 
-      stage.on('dblclick', function(event) {
-        if(event.target.id === 'stage') {
-          var model = new AudioNodeModel();
-          var view = new AudioNodeView({
-            model: model,
-            x: event.offsetX,
-            y: event.offsetY,
-            listener: listener
+        stage.on('dblclick', function(event) {
+          if(event.target.id === 'stage') {
+            var model = new AudioNodeModel();
+            var view = new AudioNodeView({
+              model: model,
+              x: event.offsetX,
+              y: event.offsetY,
+              listener: listener
+            });
+
+            layout.insertView(view);
+            view.render();
+          }
+        });
+      });
+
+      postal.subscribe({
+        channel  : "AudioNode",
+        topic    : "controls.show",
+        callback : function(data, envelope) {
+          var controlView = new AudioNodeControlView({
+            model: data.model
           });
-          view.render();
+          layout.insertView(controlView);
+          controlView.render();
         }
       });
     }
   };
-});}());
+});
+define('run',['require','exports','module','underscore','app','backbone.layoutmanager','backbone'],function(require, exports, module) {
+  var _ = require('underscore');
+  var app = require('app');
+  var LayoutManager = require('backbone.layoutmanager');
+  var Backbone = require("backbone");
+
+  var makeTemplate = function(contents) {
+    var out;
+    if (contents){
+      out = _.template(contents);
+    } else {
+      out = '';
+    }
+    return out;
+  };
+
+  // Mange views with the excellent layout manager.
+  LayoutManager.configure({
+    // Allow LayoutManager to augment Backbone.View.prototype.
+    manage: true,
+
+    // Indicate where templates are stored.
+    prefix: "templates/",
+    // Fetch templates via AJAX
+    fetch: function(path) {
+      var prefix = Backbone.Layout.prototype.options.prefix;
+      // If path is an object that has a property called getter and it's a function. Call it.
+      if(_.isFunction(path.getter)) {
+        path = path.getter();
+        // If it comes back with a value, prepend the path prefix.
+        if(path && path !== prefix) {
+          path = prefix + path;
+        }
+      }
+
+      // To bypass fetching a template altogether if one is not needed, a
+      // view can specify false or an empty string as the path
+      if (!path || path == prefix) {
+        return '';
+      }
+
+      var fullPath = path + ".htm";
+
+      if (window.JST && window.JST[fullPath]) {
+        return makeTemplate(window.JST[fullPath]());
+      }
+
+      var done = this.async();
+
+      $.get(fullPath, function(contents) {
+        done(makeTemplate(contents));
+      }, "text");
+    }
+  });
+
+  app.init();
+});
+require(["main"]);
+}());
