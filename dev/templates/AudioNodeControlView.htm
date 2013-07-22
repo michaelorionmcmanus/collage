@@ -1,0 +1,32 @@
+<div class="modal-header">
+  <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+  <h3 id="myModalLabel">Audio Node Settings</h3>
+</div>
+<div class="modal-body">
+  <form class="form-horizontal">
+    <div class="control-group">
+      <label class="control-label" for="rolloffFactor">Rolloff Factor</label>
+      <div class="controls">
+        <div class="input-append">
+          <input type="number" id="rollofFactor" name="rolloffFactor">
+          <button type="button" class="btn btn-primary" data-toggle="popover" data-placement="left" data-content="Describes how quickly the volume is reduced as source moves away from listener." title="" data-original-title="Rolloff Factor"><i class=" icon-info-sign icon-white"/></button>
+        </div>
+      </div>
+    </div>
+    <div class="control-group">
+      <label class="control-label" >Orientation</label>
+      <div class="controls">
+        X: <input type="number" class="input-mini" name="orientationX"/> Y: <input type="number" class="input-mini" name="orientationY"/> Z: <input type="number" class="input-mini" name="orientationZ"/>
+      </div>
+    </div>
+    <div class="control-group">
+      <label class="control-label" >Cones</label>
+      <div class="controls">
+        Inner: <input type="number" class="input-mini" name="coneInnerAngle"/> Outer: <input type="number" class="input-mini" name="coneOuterAngle"/>
+      </div>
+    </div>
+  </form>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-primary" data-dismiss="modal" aria-hidden="true">Close</button>
+</div>

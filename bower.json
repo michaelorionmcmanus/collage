@@ -11,7 +11,8 @@
     "handlebars": "~1.0.0",
     "Squire.js": "latest",
     "mocha": "~1.12.0",
-    "almond": "~0.2.5"
+    "almond": "~0.2.5",
+    "postal.js": "~0.8.4"
   },
   "ignore": [
     "**/.*",

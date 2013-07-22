@@ -12,7 +12,8 @@
     "backbone": "~1.0.0",
     "underscore.deferred": "~0.4",
     "underscore": "~1.4",
-    "backbone.epoxy": "~1.0.1"
+    "backbone.epoxy": "~1.0.1",
+    "backbone.layoutmanager": "~0.8.8"
   },
   "devDependencies": {
     "grunt": "~0.4.1",

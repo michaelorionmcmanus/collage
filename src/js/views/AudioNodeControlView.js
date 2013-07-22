@@ -6,6 +6,7 @@ define([
   ) {
   return Backbone.Epoxy.View.extend({
     className: 'modal hide fade controls',
+    template: 'AudioNodeControlView',
 
     events: {
       'hidden': function() {
@@ -22,17 +23,11 @@ define([
       "input[name='coneOuterAngle']": "value:coneOuterAngle"
     },
 
-    template: function() {
-      var source = $('#AudioNodeControlTemplate').html();
-      return Handlebars.compile(source);
-    },
-
-    render: function() {
-      var markup = this.template();
-      this.$el.append(markup());
+    afterRender: function() {
       this.$('[data-toggle="popover"]').popover();
       this.applyBindings();
       this.$el.modal();
     }
+
   });
 });

@@ -1,30 +1,33 @@
 define([
   'backbone',
-  'views/AudioNodeControlView',
-  'controllers/Util'
+  'controllers/Util',
+  'postal'
 ], function(
   Backbone,
-  AudioNodeControlView,
-  Util
+  Util,
+  postal
   ) {
   return Backbone.View.extend({
     moving: false,
     className: 'circle',
+    template: 'AudioNode',
 
     events: {
       'drag': function(event, dd) {
         this.handleDrag(event, dd);
       },
       'dblclick': 'buildSound',
-      'click .control': 'renderControls'
+      'click .control': 'renderControls',
+      'afterRender': function() {
+        debugger;
+      }
     },
 
     initialize: function() {
       _.bindAll(this, 'buildSound', 'handleDrag');
     },
 
-    render: function() {
-      $('#stage').append(this.$el);
+    afterRender: function() {
       var y = this.options.y - this.$el.outerHeight() / 2;
       var x = this.options.x - this.$el.outerWidth() / 2;
       this.position(x,y);
@@ -133,10 +136,13 @@ define([
     },
 
     renderControls: function() {
-      var controlView = new AudioNodeControlView({
-        model: this.model
+      postal.publish({
+        channel : "AudioNode",
+        topic   : "controls.show",
+        data    : {
+          model : this.model
+        }
       });
-      controlView.render();
     }
   });
 });
