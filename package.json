@@ -33,6 +33,11 @@
     "grunt-contrib-compress": "~0.5.2",
     "grunt-contrib-uglify": "~0.2.2",
     "grunt-contrib-handlebars": "~0.5.10",
-    "grunt-contrib-jst": "~0.5.1"
+    "grunt-contrib-jst": "~0.5.1",
+    "underscore.deferred": "~0.4.0",
+    "backbone": "~1.0.0",
+    "underscore": "~1.4.4",
+    "backbone.layoutmanager": "~0.8.8",
+    "backbone.epoxy": "~1.0.1"
   }
 }
