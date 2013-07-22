@@ -32,8 +32,8 @@ requirejs.config({
     'backbone.epoxy': '../../node_modules/backbone.epoxy/backbone.epoxy',
     'q': '../../bower_components/q/q',
     'two': '../../bower_components/two/build/two',
-    'handlebars': '../../bower_components/handlebars/handlebars',
-    'twitter.bootstrap': '../../lib/bootstrap.min'
+    'twitter.bootstrap': '../../lib/bootstrap.min',
+    'postal': '../../bower_components/postal.js/lib/postal'
   },
 
   shim: {
@@ -55,9 +55,6 @@ requirejs.config({
     },
     'twitter.bootstrap': {
       deps: ['jquery']
-    },
-    'handlebars': {
-      exports: 'Handlebars'
     }
   },
 
