@@ -10,7 +10,8 @@
     "pure": "~0.2.0",
     "mocha": "~1.12.0",
     "almond": "~0.2.5",
-    "postal.js": "~0.8.4"
+    "postal.js": "~0.8.4",
+    "requirejs": "~2.1.8"
   },
   "ignore": [
     "**/.*",
