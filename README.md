@@ -1,4 +1,20 @@
 Collage
+
+A Backbone app that can be used to plot sounds in 3D space.
+
+This is a fun little experiment of mine that I developed in order to play with the Web Audio API and try out Backbone libraries and plugins.
+
+A running example lives at: http://code.michaelmcman.us/collage/
+
+To use:
+
+* Double click anywhere on the stage to drop a "node".
+* Double click the node's big orange middle area to open a file dialog, which can be used to select an audio file.
+* The file will load and start running on a loop. 
+* Drag the node around the "listener" (the big blue dot in the middle) to produce spatial effects.
+
+Use headphone for best results.
+
 =======
 Sound in Space
 ## Quick Start
