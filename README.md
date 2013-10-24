@@ -11,7 +11,7 @@ After donning headphones and loading the app in a capable browser (Chrome):
 * Double click anywhere on the stage to drop a "node".
 * Double click the node's big orange middle area to open a file dialog, which can be used to select an audio file.
 * The file will load and start running on a loop. 
-* Drag the node around the "listener" (the big blue dot in the middle) to produce spatial effects.
+* Drag the node around the "listener" (the big blue dot in the middle) to produce spatial audio effects!
 
 Use headphone for best results.
 
