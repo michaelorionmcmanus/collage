@@ -1,6 +1,6 @@
 Collage
 
-A Backbone app that can be used to plot sounds in 3D space.
+A Backbone app that can be used to plot sounds in "3D" space.
 
 This is a fun little experiment of mine that I developed in order to play with the Web Audio API and try out Backbone libraries and plugins.
 
