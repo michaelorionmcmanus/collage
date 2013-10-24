@@ -1,12 +1,12 @@
-Collage
+#Collage
 
 A Backbone based app that allows users to plot and listen to sounds in "3D" space.
 
-This is a fun little project that I developed in order to play with the Web Audio API and experiment with Backbone libraries and plugins.
+This is a fun little project that I developed in order to play with the Web Audio API and experiment with thirdparty Backbone libraries and plugins.
 
 A running example lives at: http://code.michaelmcman.us/collage/
 
-After loading that page in a capable browser, like Chrome:
+After donning headphones and loading the app in a capable browser (Chrome):
 
 * Double click anywhere on the stage to drop a "node".
 * Double click the node's big orange middle area to open a file dialog, which can be used to select an audio file.
@@ -16,7 +16,7 @@ After loading that page in a capable browser, like Chrome:
 Use headphone for best results.
 
 =======
-Sound in Space
+
 ## Quick Start
 1. `npm install --save-dev`
 1. `bower update && bower install`
