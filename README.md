@@ -6,7 +6,7 @@ This is a fun little project that I developed in order to play with the Web Audi
 
 A running example lives at: http://code.michaelmcman.us/collage/
 
-To use:
+After loading that page in a capable browser, like Chrome:
 
 * Double click anywhere on the stage to drop a "node".
 * Double click the node's big orange middle area to open a file dialog, which can be used to select an audio file.
