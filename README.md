@@ -22,7 +22,7 @@ Use headphone for best results.
 1. `bower update && bower install`
 1. `grunt sass`
 1. `grunt connect`
-1. Browser to `http://localhost:9001/public`
+1. Browse to `http://localhost:9001/public`
 
 ### Dependencies
 1. grunt-cli
